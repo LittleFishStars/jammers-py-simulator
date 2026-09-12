@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>无线电干扰源环境模拟器（本地演练版）</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📡</span>
+      <div>
+        <h1>无线电干扰源环境模拟器</h1>
+        <p class="subtitle">本地演练版 · 协议对齐官方 robot-protocol-v1（端口 2026）</p>
+      </div>
+    </div>
+    <div class="conn">
+      <span class="dot" id="connDot"></span>
+      <span id="connText">连接中…</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 状态卡 -->
+    <section class="card" id="statusCard">
+      <h2>测试会话</h2>
+      <div class="grid4">
+        <div class="stat"><label>状态</label><b id="stState">空闲</b></div>
+        <div class="stat"><label>问题</label><b id="stProblem">—</b></div>
+        <div class="stat"><label>案例编码</label><b id="stCase">—</b></div>
+        <div class="stat"><label>演练次数</label><b id="stRun">—</b></div>
+        <div class="stat"><label>准备倒计时</label><b id="stPrepare">—</b></div>
+        <div class="stat"><label>窗口剩余</label><b id="stWindow">—</b></div>
+        <div class="stat"><label>程序剩余</label><b id="stProgram">—</b></div>
+        <div class="stat"><label>终态原因</label><b id="stReason">—</b></div>
+      </div>
+      <div class="actions">
+        <button id="btnStart3" class="primary">开始演练 · 问题3</button>
+        <button id="btnStart4" class="primary">开始演练 · 问题4</button>
+        <button id="btnAbort" class="danger" disabled>中止测试</button>
+        <button id="btnClear" disabled>清除已完成</button>
+      </div>
+    </section>
+
+    <div class="cols">
+      <!-- 统计 -->
+      <section class="card" id="statsCard">
+        <h2>实时统计</h2>
+        <div class="grid2">
+          <div class="stat"><label>虚拟时间</label><b id="stVTime">0 s</b></div>
+          <div class="stat"><label>测量次数</label><b id="stMeas">0</b></div>
+          <div class="stat"><label>清除干扰源</label><b id="stCleared">0</b></div>
+          <div class="stat"><label>清除失败</label><b id="stCFail">0</b></div>
+          <div class="stat"><label>频道切换</label><b id="stSwitch">0</b></div>
+          <div class="stat"><label>已进入</label><b id="stEntered">否</b></div>
+        </div>
+        <h3>干扰源（<span id="stJammerN">0</span>）
+          · 全向 <span id="stOmniN">0</span> / 定向 <span id="stDirN">0</span></h3>
+        <table class="jammer-tbl">
+          <thead><tr><th>频道</th><th>类型</th><th>位置(m)</th><th>接收半径(m)</th><th>朝向</th><th>状态</th></tr></thead>
+          <tbody id="jammerBody"></tbody>
+        </table>
+      </section>
+
+      <!-- 行为日志 -->
+      <section class="card" id="logCard">
+        <h2>行为日志（尾部）</h2>
+        <pre id="logBox" class="log"></pre>
+      </section>
+    </div>
+
+    <div class="cols">
+      <!-- 场景与设置 -->
+      <section class="card" id="setupCard">
+        <h2>场景与设置（空闲时调整，重生成场景后生效）</h2>
+        <div class="form">
+          <label>干扰源数量 <input id="cfgCntMin" type="number" value="10" /> ~ <input id="cfgCntMax" type="number" value="16" /></label>
+          <label>接收半径范围(m) <input id="cfgRecvMin" type="number" value="1000" /> ~ <input id="cfgRecvMax" type="number" value="1500" /></label>
+          <label>目标区域半径(m) <input id="cfgArena" type="number" value="1800" /></label>
+          <label>生成圆盘内缩(m) <input id="cfgDiskMargin" type="number" value="30" /></label>
+          <label>清除半径(m) <input id="cfgClear" type="number" value="20" /></label>
+          <label>近距阈值(m) <input id="cfgNear" type="number" value="5" /></label>
+          <label>定向覆盖角(°全角) <input id="cfgBeam" type="number" value="180" /></label>
+          <label>示向度误差(±°) <input id="cfgBearErr" type="number" value="1" step="0.1" /></label>
+          <label>噪声网格(m) <input id="cfgNoiseGrid" type="number" value="150" /></label>
+          <label>移动速度(m/s) <input id="cfgSpeed" type="number" value="5" /></label>
+          <label>检测耗时(s) <input id="cfgMeasDur" type="number" value="5" /></label>
+          <label>清除未发现/成功(s) <input id="cfgClearNT" type="number" value="3" /> / <input id="cfgClearOK" type="number" value="5" /></label>
+          <label>切换频道耗时(s) <input id="cfgSwitchDur" type="number" value="1" /></label>
+        </div>
+        <div class="actions">
+          <button id="btnGen" class="primary">生成问题3场景（纯全向）</button>
+          <button id="btnGenDir" class="primary">生成问题4场景（含定向）</button>
+        </div>
+        <h3>运行设置</h3>
+        <div class="form">
+          <label>机器狗端口 <input id="cfgRobotPort" type="number" min="1" max="65535" value="2026" /></label>
+          <label>测试窗口(秒) <input id="cfgWindow" type="number" min="10" value="1500" /></label>
+          <label>准备倒计时(秒) <input id="cfgCountdown" type="number" min="1" value="5" /></label>
+          <label>队号(robot_id 校验基准) <input id="cfgTeam" type="text" value="local-team" /></label>
+        </div>
+        <div class="actions">
+          <button id="btnSaveCfg">保存设置</button>
+        </div>
+        <p class="hint" id="cfgHint"></p>
+      </section>
+
+      <!-- 历史 -->
+      <section class="card" id="histCard">
+        <h2>历史统计（本地 SQLite）</h2>
+        <button id="btnHistClear" class="danger small">清空历史</button>
+        <table class="hist-tbl">
+          <thead><tr><th>时间</th><th>题号</th><th>次数</th><th>结束原因</th><th>测量</th><th>清除</th><th>虚时</th><th>切换</th></tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

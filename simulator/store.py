@@ -1,0 +1,201 @@
+# -*- coding: utf-8 -*-
+"""本地持久化。
+
+1) practice-statistics-queue.sqlite3 —— 演练统计记录。
+   schema 精确对齐官方（逆向提取完整 CREATE TABLE）：
+   client_request_id / schema_version='practice-run-statistics-v1' /
+   practice_ticket_sha256 / state('queued','submitting','retry_wait',
+   'confirmed','server_rejected') / attempt_count / next_attempt_at_ms /
+   last_error_code / received_at_ms / 表级 CHECK 等。本地无服务器，
+   落库即 state='confirmed'。
+2) behavior-logs/ —— 行为日志 .jlog 文件。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import sqlite3
+import threading
+import time
+import uuid
+from pathlib import Path
+
+STATISTICS_SCHEMA_VERSION = "practice-run-statistics-v1"
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS practice_statistics_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_no TEXT NOT NULL,
+    client_request_id TEXT NOT NULL UNIQUE,
+    schema_version TEXT NOT NULL CHECK(schema_version='practice-run-statistics-v1'),
+    practice_ticket_sha256 TEXT NOT NULL UNIQUE,
+    problem_no INTEGER NOT NULL CHECK(problem_no IN(3,4)),
+    practice_run_no INTEGER NOT NULL CHECK(practice_run_no>0),
+    case_code TEXT NOT NULL,
+    entered INTEGER NOT NULL CHECK(entered IN(0,1)),
+    end_reason TEXT NOT NULL,
+    cleared_jammer_count INTEGER NOT NULL CHECK(cleared_jammer_count BETWEEN 0 AND 16),
+    measure_accepted_count INTEGER NOT NULL CHECK(measure_accepted_count BETWEEN 0 AND 131072),
+    virtual_time_us INTEGER NOT NULL CHECK(virtual_time_us BETWEEN 0 AND 360000000000),
+    program_run_duration_ms INTEGER,
+    channel_switch_count INTEGER NOT NULL,
+    clear_failure_count INTEGER NOT NULL CHECK(clear_failure_count BETWEEN 0 AND 131072),
+    jammer_count INTEGER NOT NULL CHECK(jammer_count BETWEEN 0 AND 16),
+    state TEXT NOT NULL CHECK(state IN('queued','submitting','retry_wait','confirmed','server_rejected')),
+    attempt_count INTEGER NOT NULL,
+    next_attempt_at_ms INTEGER NOT NULL,
+    last_error_code TEXT NOT NULL,
+    received_at_ms INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
+    CHECK(channel_switch_count BETWEEN 0 AND measure_accepted_count),
+    CHECK((entered=0 AND program_run_duration_ms IS NULL) OR (entered=1 AND program_run_duration_ms BETWEEN 0 AND 1200000))
+) STRICT;
+CREATE INDEX IF NOT EXISTS practice_statistics_due
+    ON practice_statistics_tasks(team_no,state,next_attempt_at_ms,created_at_ms);
+"""
+
+
+class PracticeStatsStore:
+    """演练统计 SQLite 存储（线程安全）。"""
+
+    def __init__(self, data_dir: Path):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        (self.data_dir / "behavior-logs").mkdir(parents=True, exist_ok=True)
+        self.db_path = self.data_dir / "practice-statistics-queue.sqlite3"
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._conn.executescript(_SCHEMA)
+        self._conn.commit()
+        self._log_path: Path | None = None
+        self._log_key: tuple | None = None
+
+    def next_run_no(self, problem_no: int) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT COALESCE(MAX(practice_run_no),0)+1 FROM practice_statistics_tasks WHERE problem_no=?",
+                (problem_no,),
+            )
+            return int(cur.fetchone()[0])
+
+    def new_sha256(self) -> str:
+        return hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+
+    def new_case_code(self) -> str:
+        """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码。"""
+        s = uuid.uuid4().hex[:16].upper()
+        return "-".join(s[i:i + 4] for i in range(0, 16, 4))
+
+    def record_result(self, **rec) -> int:
+        return self.insert_result(rec)
+
+    def append_behavior_log(self, problem_no: int, run_no: int, rec: dict):
+        """追加行为日志事件（惰性建文件 + 写头）。"""
+        key = (problem_no, run_no)
+        with self._lock:
+            if self._log_key != key or self._log_path is None:
+                ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+                self._log_path = (self.data_dir / "behavior-logs"
+                                  / f"practice-p{problem_no}-{run_no}-{ts}.jlog")
+                with open(self._log_path, "w", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "schema_version": "jammers-event-chain/v1",
+                        "profile_version": "practice-local-v1",
+                        "problem_no": problem_no,
+                        "practice_run_no": run_no,
+                        "created_at_ms": int(time.time() * 1000),
+                    }, ensure_ascii=False) + "\n")
+                self._log_key = key
+            with open(self._log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    def insert_result(self, rec: dict) -> int:
+        with self._lock:
+            now = int(time.time() * 1000)
+            entered = 1 if rec.get("entered", True) else 0
+            run_duration = rec.get("program_run_duration_ms")
+            if entered == 0:
+                run_duration = None
+            cur = self._conn.execute(
+                """INSERT INTO practice_statistics_tasks
+                   (team_no, client_request_id, schema_version, practice_ticket_sha256,
+                    problem_no, practice_run_no, case_code, entered, end_reason,
+                    cleared_jammer_count, measure_accepted_count, virtual_time_us,
+                    program_run_duration_ms, channel_switch_count, clear_failure_count,
+                    jammer_count, state, attempt_count, next_attempt_at_ms,
+                    last_error_code, received_at_ms, created_at_ms, updated_at_ms)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    rec.get("team_no", ""),
+                    rec.get("client_request_id", str(uuid.uuid4())),
+                    STATISTICS_SCHEMA_VERSION,
+                    rec.get("practice_ticket_sha256", _rand_sha256()),
+                    int(rec["problem_no"]),
+                    int(rec["practice_run_no"]),
+                    rec.get("case_code", ""),
+                    entered,
+                    rec.get("end_reason", ""),
+                    int(rec.get("cleared_jammer_count", 0)),
+                    int(rec.get("measure_accepted_count", 0)),
+                    int(rec.get("virtual_time_us", 0)),
+                    run_duration,
+                    int(rec.get("channel_switch_count", 0)),
+                    int(rec.get("clear_failure_count", 0)),
+                    int(rec.get("jammer_count", 0)),
+                    "confirmed",  # 本地版落库即确认（无服务器）
+                    0,            # attempt_count
+                    0,            # next_attempt_at_ms
+                    "",           # last_error_code
+                    now,          # received_at_ms
+                    now,
+                    now,
+                ),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
+
+    def list_results(self, limit: int = 100) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM practice_statistics_tasks ORDER BY created_at_ms DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            cols = [d[0] for d in self._conn.execute("SELECT * FROM practice_statistics_tasks LIMIT 0").description]
+            return [dict(zip(cols, r)) for r in rows]
+
+    def clear_results(self) -> int:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM practice_statistics_tasks")
+            self._conn.commit()
+            return cur.rowcount
+
+    def close(self):
+        with self._lock:
+            self._conn.close()
+
+
+def _rand_sha256() -> str:
+    return hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+
+
+def new_case_code() -> str:
+    """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码。"""
+    s = uuid.uuid4().hex[:16].upper()
+    return "-".join(s[i:i + 4] for i in range(0, 16, 4))
+
+
+def open_behavior_log(data_dir: Path, problem_no: int, run_no: int) -> Path:
+    """按官方命名约定创建行为日志文件：practice-p%d-%d-%s.jlog"""
+    ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+    path = data_dir / "behavior-logs" / f"practice-p{problem_no}-{run_no}-{ts}.jlog"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "schema_version": "jammers-event-chain/v1",
+            "profile_version": "practice-local-v1",
+            "problem_no": problem_no,
+            "practice_run_no": run_no,
+            "created_at_ms": int(time.time() * 1000),
+        }, ensure_ascii=False) + "\n")
+    return path

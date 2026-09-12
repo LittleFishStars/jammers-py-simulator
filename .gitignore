@@ -1,0 +1,16 @@
+# 运行态数据：SQLite 统计队列 + 行为日志（含队号，不入库）
+data/
+
+# 生成产物：示向度误差分布图（由 tools/ 下的脚本生成）
+figures/
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+.uv-cache/
+
+# 编辑器与系统
+.idea/
+Thumbs.db
+desktop.ini

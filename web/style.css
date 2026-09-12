@@ -1,0 +1,66 @@
+/* 无线电干扰源环境模拟器 - 本地演练版控制台样式 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f4f6f7; --surface: #ffffff; --border: #dde3e6; --fg: #182026;
+  --fg-dim: #5c6770; --accent: #0a84ff; --accent-fg: #ffffff;
+  --success: #1e8e3e; --danger: #d93025; --warn: #b06000;
+  --radius: 10px;
+}
+body { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+       background: var(--bg); color: var(--fg); font-size: 14px; }
+.topbar { display: flex; justify-content: space-between; align-items: center;
+  background: #1b2733; color: #fff; padding: 12px 24px; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { font-size: 30px; }
+.brand h1 { font-size: 18px; }
+.subtitle { font-size: 12px; color: #9fb0bf; }
+.conn { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c7d3dc; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #6b7280; display: inline-block; }
+.dot.ok { background: var(--success); }
+.dot.bad { background: var(--danger); }
+
+main { max-width: 1120px; margin: 20px auto; padding: 0 16px; display: grid; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.card h2 { font-size: 15px; margin-bottom: 12px; color: #1b2733; }
+.card h3 { font-size: 13px; margin: 14px 0 8px; color: var(--fg-dim); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+.grid4, .grid2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 14px; margin-bottom: 6px; }
+.grid2 { grid-template-columns: repeat(2, 1fr); }
+.stat { background: #f8fafb; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.stat label { display: block; font-size: 11px; color: var(--fg-dim); margin-bottom: 2px; }
+.stat b { font-size: 16px; word-break: break-all; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+button { border: 1px solid var(--border); background: #fff; color: var(--fg);
+  border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button.primary:hover:not(:disabled) { background: #0a6fd0; color: #fff; }
+button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.danger:hover:not(:disabled) { background: #b3261e; color: #fff; }
+button.small { padding: 3px 10px; font-size: 12px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--fg-dim); font-weight: 500; }
+.jammer-tbl td.omni { color: var(--accent); }
+.jammer-tbl td.dir { color: var(--warn); }
+
+.form { display: grid; gap: 8px; }
+.form label { font-size: 12.5px; color: var(--fg); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.form input { width: 90px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.form input[type=text] { width: 160px; }
+.hint { font-size: 12px; color: var(--fg-dim); margin-top: 8px; }
+
+.log { background: #10161d; color: #d7e3ea; border-radius: 8px; padding: 10px;
+  font-family: "JetBrains Mono", Consolas, monospace; font-size: 11.5px;
+  height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.log .lifecycle { color: #7ee2a8; }
+.log .robot { color: #ffd479; }
+.log .meta { color: #7b8794; }
+
+.hist-tbl { margin-top: 8px; }
+.hist-tbl td { font-size: 12px; }
