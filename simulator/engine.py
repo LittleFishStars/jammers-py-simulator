@@ -47,17 +47,14 @@ def _angle_diff(a: float, b: float) -> float:
 
 
 def _noise_seed(scenario: Scenario) -> int:
-    """由场景 noise_seed_hex 派生出 64 位噪声种子，官方那边是 uint64
-
-    noise_seed_hex 是 16 位十六进制。缺失或者不合法时，退化成对场景标识做一次
-    BLAKE2b-64 摘要，这样同一个场景的误差场照样可复现
-    """
+    """从场景的 noise_seed_hex 取出 64 位噪声种子"""
     raw = (scenario.noise_seed_hex or "").strip()
     if raw:
         try:
             return int(raw, 16) & 0xFFFFFFFFFFFFFFFF
         except ValueError:
             pass
+    # 种子缺失或不合法时退化成对场景标识做摘要，同一场景的误差场照样可复现
     basis = f"{scenario.source}|{scenario.generator_seed_hex}|{scenario.generation_rules}"
     digest = hashlib.blake2b(basis.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big")
@@ -110,18 +107,14 @@ class Engine:
 
     # ---- 工具 ----
     def _us(self, seconds: float) -> int:
-        """秒转成微秒整数，官方规则字段本身就是整数微秒"""
+        """秒转成整数微秒，虚拟时钟按整数微秒累加"""
         return int(round(seconds * 1_000_000))
 
     def _move_duration_us(self, x: float, y: float) -> int:
-        """移动耗时，单位微秒
-
-        官方 simcore.(*Engine).moveTo 的算法是 int64(1e12 * 距离m / speed_um_per_s)：
-        先乘 1e12，再除以以微米每秒表示的速度，结果向零截断成整数微秒。浮点运算的
-        先后顺序必须原样保留，换个顺序末位微秒就可能不一样
-        """
+        """走到 (x, y) 要花多少微秒"""
         distance_m = math.hypot(x - self.last_x, y - self.last_y)
         speed_um_per_s = self._us(self.rules.move_speed_m_per_s)
+        # 先乘 1e12 再除以微米每秒的速度，向零截断；运算顺序换了末位微秒可能不一样
         return int(1e12 * distance_m / speed_um_per_s)
 
     def _jammer_on_channel(self, channel: int) -> Jammer | None:
@@ -131,26 +124,18 @@ class Engine:
         return None
 
     def _in_directional_coverage(self, jammer: Jammer, x: float, y: float) -> bool:
-        """检测点是否落在定向干扰源的有效覆盖角度之内，边界算在内
-
-        对应官方 simcore.directionalCoverage。全向源直接算覆盖；定向源判
-        |Δ| <= 90° + 1e-9，半角 90°、全角 180°，Δ 是干扰源指向检测点的方位角
-        与干扰源朝向之差。注意这个函数只管角度，距离由接收半径另外判
-        """
+        """检测点是不是落在定向源的有效覆盖角度里，边界算在内"""
         if jammer.kind != KIND_DIRECTIONAL or jammer.direction_deg is None:
             return True
         bearing = _normalize_bearing(math.degrees(math.atan2(y - jammer.y_m, x - jammer.x_m)))
         half = self.rules.directional_beam_width_deg / 2.0
+        # 全角 180° 就是半角 90°，判 |Δ| <= 90° + 1e-9；这里只管角度，距离另判
         return _angle_diff(bearing, jammer.direction_deg) <= half + 1e-9
 
     def _svd_deg(self, jammer: Jammer, x: float, y: float,
                  channel: int) -> tuple[float, int]:
-        """检测点指向干扰源的方位角，再加一层确定性空间噪声
-
-        返回 (svd_deg 保留两位小数, bearing_hundredths 百分之一度的整数)。
-        误差只跟噪声种子、频道、测量位置有关，同一位置同一频道重复测误差一模一样，
-        取平均压不下去
-        """
+        """检测点指向干扰源的方位角叠上确定性空间噪声，返回 (svd_deg 两位小数, 百分之一度整数)"""
+        # 误差只跟噪声种子、频道、测量位置有关，同一位置同一频道重复测一模一样，取平均压不下去
         true_bearing = _normalize_bearing(
             math.degrees(math.atan2(jammer.y_m - y, jammer.x_m - x)))
         err = bearingnoise.error_degrees(self.seed, channel, x, y,

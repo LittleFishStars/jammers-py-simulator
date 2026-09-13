@@ -17,7 +17,7 @@ WEB_BASE = f"http://127.0.0.1:{WEB_PORT}"
 
 
 def robot_req(method: str, path: str, body=None, headers=None):
-    """发机器人接口请求。返回 (status, parsed) 或 (None, None) 表示连接被直接关闭。"""
+    """发一次机器人接口请求，返回 (status, 解析后的 JSON)，连接被直接关闭时返回 (None, None)"""
     conn = http.client.HTTPConnection(ROBOT_BASE, timeout=5)
     try:
         h = {}
@@ -43,7 +43,7 @@ def robot_post(path: str, payload: dict, headers=None):
 
 
 def robot_post_raw(path: str, payload: dict):
-    """返回 (status, 原始响应文本)，用于逐字节校验官方 JSON 文本格式。"""
+    """发一次 POST 并保留原始响应文本，用来逐字节核对官方的数字格式"""
     conn = http.client.HTTPConnection(ROBOT_BASE, timeout=5)
     try:
         conn.request("POST", path, body=json.dumps(payload).encode("utf-8"),

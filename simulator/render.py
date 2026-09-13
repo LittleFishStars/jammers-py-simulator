@@ -18,23 +18,20 @@ _REJECTED = '{"accepted":false,"real_timestamp_ms":%d,"virtual_time_s":0}'
 
 
 def virtual_seconds(virtual_time_us: int) -> str:
-    """官方 robotapi.virtualSeconds：微秒 → 无尾随零的秒数字面量
-
-    整数秒输出 "%d"；否则 "%d.%06d" 后 TrimRight("0")。
-    负数按 Go 的整数除法向零取整。
-    """
+    """微秒转成秒的数字字面量，去掉尾随零，负数按向零取整"""
     us = int(virtual_time_us)
     sign = "-" if us < 0 else ""
     us = abs(us)
     whole, frac = divmod(us, 1_000_000)
     if frac == 0:
         return f"{sign}{whole}"
+    # 有小数部分就走 "%d.%06d"，再去掉尾随零
     text = f"{sign}{whole}.{frac:06d}".rstrip("0")
     return text
 
 
 def _quote(value: str) -> str:
-    """字符串值转义，只用于 result 枚举与诊断文本"""
+    """把字符串转义成 JSON 字面量"""
     return json.dumps(value, ensure_ascii=False)
 
 

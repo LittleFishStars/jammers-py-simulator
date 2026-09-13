@@ -35,10 +35,7 @@ def _clamp01(t: float) -> float:
 
 def error_degrees(seed: int, salt: int, x_m: float, y_m: float,
                   grid_m: float = _NOISE_GRID_M) -> float:
-    """官方 bearingnoise.ErrorDegrees：返回示向度误差，单位为度，值域 (-1, 1)
-
-    seed 是场景噪声种子，salt 是请求频道，x_m/y_m 是机器狗本次的测量位置，单位米
-    """
+    """返回示向度误差，单位为度，值域 (-1, 1)，同一个位置同一个频道恒定"""
     gx = x_m / grid_m
     gy = y_m / grid_m
     ix = math.floor(gx)
@@ -59,11 +56,8 @@ def error_degrees(seed: int, salt: int, x_m: float, y_m: float,
 
 
 def quantize_bearing_hundredths(bearing_deg: float, error_deg: float) -> int:
-    """官方 bearingnoise.QuantizeBearingHundredths：量化到百分之一度并回绕
-
-    先把真实示向度加误差归一化到 [0, 360)，再截断到 0.01°，最后回绕到 [0, 36000)。
-    加 1e-9 只为抵消二进制浮点的表示误差，比如 359.20 会存成 359.19999…。
-    """
+    """真实示向度加误差后量化到百分之一度并回绕到 [0, 36000)"""
     total = (bearing_deg + error_deg) % 360.0
+    # 加 1e-9 抵消二进制浮点误差，否则 359.20 会截断成 359.19
     hundredths = int(total * 100.0 + 1e-9)
     return hundredths % _HUNDREDTHS_PER_TURN

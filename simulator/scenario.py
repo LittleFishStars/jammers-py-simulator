@@ -127,15 +127,10 @@ def _rand_seed_hex(n_bytes: int) -> str:
 
 
 def generate_scenario(rules: SimulationRules, problem_no: int, seed: int | None = None) -> Scenario:
-    """在生成圆盘里撒 10..16 个干扰源，圆盘默认 1770m
-
-    位置取圆盘面积均匀分布：r = R·sqrt(u)、theta = 2πu₂，官方那边叫 uniform_disk_area。
-    频道从 1..20 里随机抽 n 个再升序排，唯一且严格递增。receive 在 [1000,1500] 米之间随机。
-    定向源的数量对齐官方 GeneratePractice：问题3 一个都不给，纯全向；问题4 至少 1 个，
-    在 1..n 里随机。
-    """
+    """在生成圆盘里按面积均匀撒 10..16 个干扰源，问题3 纯全向，问题4 至少一个定向"""
     rng = random.Random(seed)
     n = rng.randint(int(rules.jammer_count_min), int(rules.jammer_count_max))
+    # 频道从 1..20 抽 n 个再升序排，唯一且严格递增
     channels = sorted(rng.sample(range(int(rules.channel_min), int(rules.channel_max) + 1), n))
     if problem_no == 3:
         n_dir = 0
@@ -171,11 +166,7 @@ def generate_scenario(rules: SimulationRules, problem_no: int, seed: int | None 
 
 
 def demo_scenario(problem_no: int = 4) -> Scenario:
-    """确定性演示场景：10 个干扰源，便于联调，也满足官方 10..16 的约束
-
-    问题4：ch2 为定向，朝向 90°，覆盖 0°..180°，其余全向；
-    问题3：全部全向
-    """
+    """固定 10 个干扰源的演示场景，便于联调；问题4 的 ch2 朝向 90°，问题3 全部全向"""
     positions = [
         (500.0, 0.0), (-800.0, 0.0), (0.0, 900.0), (-1200.0, 300.0),
         (1500.0, 500.0), (-500.0, -1000.0), (700.0, -1300.0), (100.0, -400.0),

@@ -81,7 +81,7 @@ class PracticeStatsStore:
         return self.insert_result(rec)
 
     def append_behavior_log(self, problem_no: int, run_no: int, rec: dict):
-        """追加一条行为日志事件，文件惰性创建，建的时候顺手写表头"""
+        """向行为日志追加一条事件，文件按需创建并先写一行表头"""
         key = (problem_no, run_no)
         with self._lock:
             if self._log_key != key or self._log_path is None:
@@ -176,7 +176,7 @@ def new_case_code() -> str:
 
 
 def open_behavior_log(data_dir: Path, problem_no: int, run_no: int) -> Path:
-    """按官方命名约定创建行为日志文件：practice-p%d-%d-%s.jlog"""
+    """创建行为日志文件并写入表头，返回文件路径"""
     ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
     path = data_dir / "behavior-logs" / f"practice-p{problem_no}-{run_no}-{ts}.jlog"
     path.parent.mkdir(parents=True, exist_ok=True)

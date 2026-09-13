@@ -255,11 +255,7 @@ class SessionManager:
         return self.state in ("window_open", "running")
 
     def handle(self, path: str, req: dict) -> tuple[int, str] | None:
-        """处理一个已通过 HTTP 层校验的请求
-
-        返回 (status, json_text)；接口未开放或者测试已结束时返回 None，那种情况直接关连接，
-        不给 JSON。响应体是官方 renderResult 同款的手工拼装文本，数字格式逐字节对齐。
-        """
+        """处理一个已通过 HTTP 层校验的请求，返回 (status, json_text)"""
         if not self.interface_open():
             return None  # 接口未开放/已结束：直接关闭连接，无 JSON
 
@@ -273,12 +269,12 @@ class SessionManager:
             self._lock.release()
 
     def _us(self, seconds: float) -> int:
-        """秒 → 微秒整数，官方规则字段本身就是整数微秒"""
+        """秒转成整数微秒，虚拟时钟按整数微秒累加"""
         return int(round(seconds * 1_000_000))
 
     def _err_text(self, diagnostic: str = "") -> str:
-        """accepted=false：官方恒为固定 3 字段，且 virtual_time_s 是字面量 0"""
-        self._last_diagnostic = diagnostic
+        """渲染一条 accepted=false 的响应文本，diagnostic 只留在对象上供排查"""
+        self._last_diagnostic = diagnostic  # 官方响应里没有这个字段，本地留一份
         return render.render_rejected(int(time.time() * 1000))
 
     def _handle_locked(self, path: str, req: dict) -> tuple[int, str]:
@@ -346,6 +342,7 @@ class SessionManager:
             rec = self._idem[request_id]
             if rec.canonical == canonical:
                 return (rec.status, rec.body)
+            # 同一个 request_id 换了内容算冲突，走 409
             return (_HTTP_CONFLICT, self._err_text("request_id reused with different content"))
         if len(self._idem) >= _IDEMPOTENCY_LIMIT:
             return (_HTTP_TOO_MANY, self._err_text("idempotency records exhausted"))

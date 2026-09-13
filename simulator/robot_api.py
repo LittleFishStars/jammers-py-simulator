@@ -50,7 +50,7 @@ def _json_depth(obj, depth: int = 1) -> int:
 
 
 def strict_loads(raw: bytes):
-    """严格解析请求体，失败抛 ValueError"""
+    """严格解析请求体，不允许 BOM、重复键和过深嵌套，不合法就抛 ValueError"""
     if raw.startswith(b"\xef\xbb\xbf"):
         raise ValueError("BOM not allowed")
     try:
@@ -111,7 +111,7 @@ class RobotHandler(BaseHTTPRequestHandler):
 
     # ---- 基础 ----
     def _send(self, code: int, text: str):
-        """text 是已按官方格式渲染好的 JSON 文本，见 simulator.render"""
+        """把已经渲染好的 JSON 文本按 UTF-8 字节数发出去"""
         body = text.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -136,7 +136,7 @@ class RobotHandler(BaseHTTPRequestHandler):
         return self.path
 
     def _check_content_headers(self) -> bool:
-        """返回 False 表示已经写出错误响应"""
+        """检查 Content-Type 与 Content-Encoding，不合法时自己写出 415 并返回 False"""
         # Content-Type
         ctype = self.headers.get("Content-Type")
         if ctype is None:
@@ -164,7 +164,7 @@ class RobotHandler(BaseHTTPRequestHandler):
         return True
 
     def _read_body(self) -> bytes | None:
-        """返回 body；出错时已经写出响应，返回 None"""
+        """按 Content-Length 读请求体，长度不合法时自己写出响应并返回 None"""
         length_raw = self.headers.get("Content-Length")
         if length_raw is None:
             self._err(HTTP_BAD_REQUEST)
