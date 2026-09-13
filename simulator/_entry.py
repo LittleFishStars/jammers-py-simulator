@@ -14,6 +14,7 @@ from .webui import WebUI
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """构建命令行解析器，缺省值统一留 None 以便区分没传和传了"""
     p = argparse.ArgumentParser(description="无线电干扰源环境模拟器（本地演练版，Python）")
     p.add_argument("--robot-host", default=None, help="机器狗接口监听地址（默认 127.0.0.1）")
     p.add_argument("--robot-port", type=int, default=None, help="机器狗接口端口（默认 2026）")
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def apply_overrides(cfg: Config, args) -> None:
+    """把命令行里显式给出的参数覆盖到配置对象上，空值为 None 的项直接跳过"""
     if args.robot_host: cfg.robot_host = args.robot_host
     if args.robot_port: cfg.robot_port = args.robot_port
     if args.web_host: cfg.web_host = args.web_host
@@ -38,6 +40,7 @@ def apply_overrides(cfg: Config, args) -> None:
 
 
 def main(argv=None) -> int:
+    """加载配置并拉起机器狗接口与 Web 控制台，阻塞到收到退出信号，正常退出返回 0"""
     args = build_parser().parse_args(argv)
     cfg = load_config(args.config)
     apply_overrides(cfg, args)
@@ -88,10 +91,12 @@ def main(argv=None) -> int:
 
 
 def _install_signal_handlers():
+    """把 SIGINT 和 SIGTERM 接到同一个停止事件上，返回该事件供主循环等待"""
     import threading
     stop_evt = threading.Event()
 
     def _sig(*_):
+        """信号回调，只负责把停止事件置位"""
         stop_evt.set()
 
     signal.signal(signal.SIGINT, _sig)

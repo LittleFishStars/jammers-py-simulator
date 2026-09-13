@@ -22,10 +22,12 @@ def _grid(seed: int, salt: int, ix: int, iy: int) -> float:
 
 
 def _smoothstep(t: float) -> float:
+    """把格内的 0..1 偏移压成平滑权重，让相邻网格的噪声在边界上接得住"""
     return t * t * (_SMOOTHSTEP_C - 2.0 * t)
 
 
 def _clamp01(t: float) -> float:
+    """把偏移夹到 0..1，免得浮点误差把它挤出当前格子"""
     if t < 0.0:
         return 0.0
     if t > 1.0:

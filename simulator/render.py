@@ -58,4 +58,5 @@ def render_accepted(path: str, real_timestamp_ms: int, virtual_time_us: int,
 
 
 def render_rejected(real_timestamp_ms: int) -> str:
+    """渲染 accepted=false 的响应体，虚拟时间恒为 0"""
     return _REJECTED % int(real_timestamp_ms)

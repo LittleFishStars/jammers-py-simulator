@@ -30,7 +30,9 @@ _RULE_FIELDS = (
 
 
 class WebUI:
+    """本地 Web 控制台，起停 HTTP 服务并把请求交给 WebHandler 处理"""
     def __init__(self, cfg: Config, manager: SessionManager, store: PracticeStatsStore):
+        """记下配置、会话管理器和统计库，服务对象与线程先留空"""
         self.cfg = cfg
         self.manager = manager
         self.store = store
@@ -38,10 +40,12 @@ class WebUI:
         self._thread: threading.Thread | None = None
 
     def start(self) -> tuple[bool, str]:
+        """在配置的端口上起后台线程跑 HTTP 服务，返回是否成功和一句提示"""
         if self._server is not None:
             return False, "已在运行"
 
         class Handler(WebHandler):
+            """把当前 WebUI 实例绑进类属性，供各 API 方法读取"""
             ui = self
 
         try:
@@ -53,6 +57,7 @@ class WebUI:
         return True, f"控制台已开启 http://{self.cfg.web_host}:{self.cfg.web_port}"
 
     def stop(self):
+        """停掉监听套接字并等后台线程退出，最多等 2 秒"""
         if self._server is not None:
             self._server.shutdown()
             self._server.server_close()
@@ -63,18 +68,22 @@ class WebUI:
 
     @property
     def running(self) -> bool:
+        """服务是否已经起来"""
         return self._server is not None
 
 
 class WebHandler(BaseHTTPRequestHandler):
+    """控制台页面的请求处理器，管静态文件和 /api 路由"""
     ui: WebUI = None  # 由 WebUI.start 注入
 
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
+        """吞掉基类默认打到 stderr 的访问日志，控制台自己不需要"""
         pass
 
     def _send_json(self, code: int, obj: dict):
+        """按给定状态码回一份 JSON，内容以 UTF-8 编码并禁止缓存"""
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -84,6 +93,7 @@ class WebHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_file(self, rel: str, ctype: str):
+        """发 web/ 目录下的文件，路径越界回 403，读不到回 404"""
         path = (WEB_DIR / rel).resolve()
         if WEB_DIR not in path.parents and path != WEB_DIR:
             self._send_json(403, {"error": "forbidden"})
@@ -100,6 +110,7 @@ class WebHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _read_json(self, max_len: int = 262_144) -> dict | None:
+        """读请求体解析成字典，长度超限或不是 JSON 对象时返回 None"""
         try:
             length = int(self.headers.get("Content-Length", 0))
         except ValueError:
@@ -115,6 +126,7 @@ class WebHandler(BaseHTTPRequestHandler):
 
     # ---- 路由 ----
     def do_GET(self):
+        """分发 GET，页面和脚本走 _send_file，状态和历史走各自的 API"""
         path = self.path.split("?")[0]
         if path == "/":
             self._send_file("index.html", "text/html; charset=utf-8")
@@ -130,6 +142,7 @@ class WebHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "not_found"})
 
     def do_POST(self):
+        """按路径查表分发 POST，查不到的路径回 404"""
         path = self.path.split("?")[0]
         routes = {
             "/api/start": self._api_start,
@@ -147,6 +160,7 @@ class WebHandler(BaseHTTPRequestHandler):
 
     # ---- API ----
     def _api_state(self):
+        """回会话快照，外带端口、窗口时长等页面要显示的服务端配置"""
         snap = self.ui.manager.snapshot()
         snap["config"] = {
             "robot_port": self.ui.cfg.robot_port,
@@ -159,6 +173,7 @@ class WebHandler(BaseHTTPRequestHandler):
         self._send_json(200, snap)
 
     def _api_start(self):
+        """开一次演练，请求里带了场景就先校验再交给会话管理器"""
         req = self._read_json() or {}
         problem_no = int(req.get("problem_no", 3))
         scenario = None
@@ -173,14 +188,17 @@ class WebHandler(BaseHTTPRequestHandler):
         self._send_json(200 if ok else 409, {"ok": ok, "message": msg})
 
     def _api_abort(self):
+        """中止正在跑的演练，没得中止时回 409"""
         ok, msg = self.ui.manager.abort()
         self._send_json(200 if ok else 409, {"ok": ok, "message": msg})
 
     def _api_clear(self):
+        """清掉已结束的会话，返回清掉了没有"""
         ok = self.ui.manager.clear_finished()
         self._send_json(200, {"ok": ok})
 
     def _api_scenario(self):
+        """把请求里的规则字段存盘，再按新规则生成并校验一个场景"""
         req = self._read_json() or {}
         problem_no = int(req.get("problem_no", 4))
         if problem_no not in (3, 4):
@@ -204,6 +222,7 @@ class WebHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"ok": True, "scenario": sc.to_json()})
 
     def _api_config(self):
+        """改端口和窗口时长等运行配置并存盘，越界的值直接拒绝"""
         req = self._read_json() or {}
         changed = []
         for k in ("robot_port", "web_port", "window_seconds", "countdown_seconds", "team_no"):
@@ -232,8 +251,10 @@ class WebHandler(BaseHTTPRequestHandler):
                               "note": "端口等项需重启进程后生效"})
 
     def _api_history(self):
+        """回最近 200 条练习记录给历史表格"""
         self._send_json(200, {"rows": self.ui.store.list_results(200)})
 
     def _api_history_clear(self):
+        """清空练习历史，回删掉的条数"""
         n = self.ui.store.clear_results()
         self._send_json(200, {"ok": True, "deleted": n})

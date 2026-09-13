@@ -25,10 +25,12 @@ MAX_JSON_DEPTH = 16
 
 
 class _DuplicateKeyError(ValueError):
+    """JSON 请求体里出现重复键时抛出的内部异常"""
     pass
 
 
 def _reject_duplicate_keys(pairs):
+    """给 json.loads 当 object_pairs_hook，同一层出现重复键就抛错"""
     d = {}
     for k, v in pairs:
         if k in d:
@@ -38,6 +40,7 @@ def _reject_duplicate_keys(pairs):
 
 
 def _json_depth(obj, depth: int = 1) -> int:
+    """递归算出 JSON 结构的嵌套层数，空字典和空列表算作当前深度"""
     if isinstance(obj, dict):
         if not obj:
             return depth
@@ -66,17 +69,21 @@ def strict_loads(raw: bytes):
 
 
 class RobotAPI:
+    """机器狗 HTTP 接口的服务端，管着监听端口的起停"""
     def __init__(self, cfg: Config, manager: SessionManager):
+        """记下配置和会话管理器，服务器与线程留到 start 时再建"""
         self.cfg = cfg
         self.manager = manager
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> tuple[bool, str]:
+        """在后台线程里监听机器狗端口，返回是否成功和一句状态说明"""
         if self._server is not None:
             return False, "已在运行"
 
         class Handler(RobotHandler):
+            """把当前 RobotAPI 实例挂到类属性上，处理请求时直接取用"""
             api = self
 
         try:
@@ -88,6 +95,7 @@ class RobotAPI:
         return True, f"机器狗接口已开启 http://{self.cfg.robot_host}:{self.cfg.robot_port}"
 
     def stop(self):
+        """关掉服务器并等后台线程退出，没起过就跳过"""
         if self._server is not None:
             self._server.shutdown()
             self._server.server_close()
@@ -98,15 +106,18 @@ class RobotAPI:
 
     @property
     def running(self) -> bool:
+        """接口是否在监听，看服务器实例有没有建起来"""
         return self._server is not None
 
 
 class RobotHandler(BaseHTTPRequestHandler):
+    """机器狗接口的请求处理器，校验 HTTP 请求后转成会话管理器的调用"""
     api: RobotAPI = None  # 由 RobotAPI.start 注入
 
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
+        """覆盖父类的访问日志，请求不打到控制台"""
         pass
 
     # ---- 基础 ----
@@ -121,9 +132,11 @@ class RobotHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _err(self, code: int):
+        """按给定状态码回一条统一的拒绝响应"""
         self._send(code, render.render_rejected(self._now_ms()))
 
     def _now_ms(self) -> int:
+        """取当前时间的毫秒时间戳，填进拒绝响应里"""
         import time
         return int(time.time() * 1000)
 
@@ -133,6 +146,7 @@ class RobotHandler(BaseHTTPRequestHandler):
 
     # ---- 路由 ----
     def _exact_path(self) -> str:
+        """原样返回请求路径，不做归一化也不做百分号解码"""
         return self.path
 
     def _check_content_headers(self) -> bool:
@@ -187,6 +201,7 @@ class RobotHandler(BaseHTTPRequestHandler):
             return None
 
     def do_POST(self):
+        """处理 POST，路径、请求头和请求体都通过后交给会话管理器"""
         path = self.path
         if path not in KNOWN_PATHS:
             self._err(HTTP_NOT_FOUND)
@@ -213,18 +228,23 @@ class RobotHandler(BaseHTTPRequestHandler):
         self._send(status, body)
 
     def do_GET(self):
+        """GET 不支持，已知路径回 405，其余路径回 404"""
         self._method_not_allowed_or_404()
 
     def do_HEAD(self):
+        """HEAD 不支持，已知路径回 405，其余路径回 404"""
         self._method_not_allowed_or_404()
 
     def do_PUT(self):
+        """PUT 不支持，已知路径回 405，其余路径回 404"""
         self._method_not_allowed_or_404()
 
     def do_DELETE(self):
+        """DELETE 不支持，已知路径回 405，其余路径回 404"""
         self._method_not_allowed_or_404()
 
     def _method_not_allowed_or_404(self):
+        """已知路径说明方法用错了回 405，其它路径回 404"""
         if self.path in KNOWN_PATHS:
             self._err(HTTP_METHOD_NOT_ALLOWED)
         else:

@@ -38,6 +38,7 @@ def robot_req(method: str, path: str, body=None, headers=None):
 
 
 def robot_post(path: str, payload: dict, headers=None):
+    """发一次机器人接口 POST，payload 为 None 时不带请求体"""
     body = json.dumps(payload).encode("utf-8") if payload is not None else None
     return robot_req("POST", path, body, headers)
 
@@ -55,11 +56,13 @@ def robot_post_raw(path: str, payload: dict):
 
 
 def web_get(path: str) -> dict:
+    """GET 控制台接口并把响应体解析成字典"""
     with urllib.request.urlopen(WEB_BASE + path, timeout=5) as r:
         return json.loads(r.read().decode())
 
 
 def web_post(path: str, payload: dict) -> dict:
+    """POST 控制台接口，HTTP 错误响应也照样解析成字典返回"""
     req = urllib.request.Request(WEB_BASE + path, data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
@@ -70,6 +73,7 @@ def web_post(path: str, payload: dict) -> dict:
 
 
 def wait_state(expect: str, timeout_s: float = 10.0) -> dict:
+    """轮询 /api/state 直到状态等于期望值，超时还没变就抛 AssertionError"""
     t0 = time.time()
     while time.time() - t0 < timeout_s:
         snap = web_get("/api/state")
@@ -80,10 +84,12 @@ def wait_state(expect: str, timeout_s: float = 10.0) -> dict:
 
 
 def base(request_id: str) -> dict:
+    """拼一份只含公共字段的请求体，位置和频道留给调用方补"""
     return {"arena_id": "default", "robot_id": "t-test-01", "request_id": request_id}
 
 
 def action(request_id: str, x: float, y: float, channel) -> dict:
+    """在公共字段上补位置和频道，拼出 measure 与 clear 共用的请求体"""
     p = base(request_id)
     p["position"] = {"x": x, "y": y}
     p["channel"] = channel
@@ -94,6 +100,7 @@ PASS = 0
 
 
 def check(name: str, cond: bool, detail: str = ""):
+    """断言一项自测结果，通过就累加计数并打印一行 PASS"""
     global PASS
     assert cond, f"{name} 失败: {detail}"
     PASS += 1
@@ -101,6 +108,7 @@ def check(name: str, cond: bool, detail: str = ""):
 
 
 def main() -> int:
+    """起一套临时服务和临时数据目录跑完整个端到端自测，全部通过返回 0"""
     from simulator.config import Config
     from simulator.session import SessionManager
     from simulator.store import PracticeStatsStore
@@ -150,7 +158,8 @@ def main() -> int:
         body = json.loads(raw_enter)
         check("enter 成功", st == 200 and body["accepted"] is True and
               body["virtual_time_s"] == 0 and
-              {"max_virtual_duration_s", "max_real_duration_s", "remaining_real_duration_s"} <= set(body.keys()),
+              {"max_virtual_duration_s", "max_real_duration_s",
+               "remaining_real_duration_s"} <= set(body.keys()),
               str(body))
         check("enter 原始文本为官方五字段整数格式（无 .0）",
               raw_enter.startswith('{"accepted":true,"real_timestamp_ms":') and
@@ -182,7 +191,7 @@ def main() -> int:
               "svd_deg" not in body, str(body))
 
         # 9) measure 定向覆盖范围外 → no_signal（ch2 @(-800,0) 朝向90°，半角90°
-        #    即覆盖 0..180°；检测点(-800,-500) 位于 270° → 覆盖外）
+        #    覆盖 0..180°；检测点(-800,-500) 位于 270° → 覆盖外）
         st, body = robot_post("/measure", action("m-3", -800, -500, 2))
         check("measure 定向覆盖范围外 no_signal", body["measure_result"] == "no_signal", str(body))
 
@@ -208,7 +217,7 @@ def main() -> int:
         check("不同位置误差场不同（150m 相关长度）",
               far["svd_deg"] != body["svd_deg"], f'{far["svd_deg"]} == {body["svd_deg"]}')
 
-        # 11) 近距离 near：检测点(500,0) 即 ch1 位置
+        # 11) 近距离 near：检测点(500,0) 用的是 ch1 的位置
         st, body = robot_post("/measure", action("m-5", 500, 0, 1))
         check("measure near（无 svd_deg）", body["measure_result"] == "near" and
               "svd_deg" not in body, str(body))

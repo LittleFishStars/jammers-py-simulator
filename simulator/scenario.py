@@ -15,6 +15,7 @@ KIND_DIRECTIONAL = "directional"
 
 @dataclass
 class Jammer:
+    """单个干扰源，字段与官方 scenario-v1 对齐"""
     channel: int                 # 1..20，唯一
     kind: str                    # omni / directional
     x_m: float
@@ -26,6 +27,7 @@ class Jammer:
     cleared: bool = False
 
     def to_json(self) -> dict:
+        """把单个干扰源导成官方 scenario 里的字段结构"""
         d = {
             "channel": self.channel,
             "kind": self.kind,
@@ -40,6 +42,7 @@ class Jammer:
 
     @classmethod
     def from_json(cls, d: dict) -> "Jammer":
+        """从官方字段结构还原一个干扰源，缺的字段按默认值兜底"""
         pos = d.get("position", {})
         return cls(
             channel=int(d["channel"]),
@@ -56,6 +59,7 @@ class Jammer:
 
 @dataclass
 class Scenario:
+    """一次演练的干扰源布局，连同生成规则和两类随机种子"""
     source: str = "practice_generated"
     generation_rules: str = "practice-gen-rules-v1"
     generator_seed_hex: str = ""
@@ -64,9 +68,11 @@ class Scenario:
 
     @property
     def jammer_count(self) -> int:
+        """取干扰源个数，序列化时直接写进 jammer_count 字段"""
         return len(self.jammers)
 
     def to_json(self) -> dict:
+        """把整个场景导成 scenario-v1 的 JSON 结构"""
         return {
             "source": self.source,
             "generation_rules": self.generation_rules,
@@ -78,6 +84,7 @@ class Scenario:
 
     @classmethod
     def from_json(cls, d: dict) -> "Scenario":
+        """从 scenario-v1 的 JSON 结构还原场景，种子原样带过来"""
         return cls(
             source=str(d.get("source", "practice_generated")),
             generation_rules=str(d.get("generation_rules", "practice-gen-rules-v1")),
@@ -88,6 +95,7 @@ class Scenario:
 
     def validate(self, problem_no: int | None = None,
                  disk_radius_m: float = 1770.0) -> None:
+        """按官方约束逐项校验场景，问题号和生成圆盘半径由调用方给，不合规就抛 ValueError"""
         rules_ok = self.generation_rules == "practice-gen-rules-v1"
         if not rules_ok:
             raise ValueError("generation_rules must be practice-gen-rules-v1")
@@ -123,6 +131,7 @@ class Scenario:
 
 
 def _rand_seed_hex(n_bytes: int) -> str:
+    """生成 n_bytes 字节的随机种子并转成十六进制串"""
     return secrets.token_hex(n_bytes)
 
 

@@ -42,6 +42,7 @@ _IDEMPOTENCY_LIMIT = 100_000
 
 
 def _has_invalid_char(s: str) -> bool:
+    """字段里有没有控制字符或零宽格式字符，有这类字符官方直接判无效"""
     for ch in s:
         o = ord(ch)
         if o < 32 or o == 127:
@@ -64,6 +65,7 @@ def _is_int_number(v) -> bool:
 
 @dataclass
 class _IdemRecord:
+    """一条幂等记录，存下原请求的指纹和当时回给机器狗的响应"""
     path: str
     canonical: str
     status: int
@@ -71,7 +73,9 @@ class _IdemRecord:
 
 
 class SessionManager:
+    """一次测试会话的状态机，管住准备、开窗、运行到结束的流转"""
     def __init__(self, cfg: Config, store: PracticeStatsStore):
+        """接住配置和统计库，把状态、时钟和幂等表摆成初始态"""
         self.cfg = cfg
         self.store = store
         self.rules: SimulationRules = cfg.rules
@@ -97,6 +101,7 @@ class SessionManager:
 
     # ================= 状态机 =================
     def start(self, problem_no: int, scenario: Scenario | None = None) -> tuple[bool, str]:
+        """开一局新测试，没给场景就按规则生成，返回是否被接受和原因"""
         with self._lock:
             if self.state not in ("idle", "finished"):
                 return False, "已有测试在进行中"
@@ -130,6 +135,7 @@ class SessionManager:
             return True, "已开始准备"
 
     def _start_monitor(self):
+        """起一个守护线程轮询会话时钟，已经在跑就不重复起"""
         if self._monitor and self._monitor.is_alive():
             return
         self._monitor_stop.clear()
@@ -137,6 +143,7 @@ class SessionManager:
         self._monitor.start()
 
     def _monitor_loop(self):
+        """每 0.2 秒推一次状态机，准备超时就开窗，窗口或虚拟时长跑满就结束"""
         while not self._monitor_stop.is_set():
             time.sleep(0.2)
             with self._lock:
@@ -157,6 +164,7 @@ class SessionManager:
                         self._finish(END_WINDOW_TIMEOUT_RUNNING)
 
     def _finish(self, reason: str):
+        """把会话钉进终态，记下结束原因并落一次统计"""
         if self.state == "finished":
             return
         self.state = "finished"
@@ -165,6 +173,7 @@ class SessionManager:
         self._persist_statistics()
 
     def abort(self) -> tuple[bool, str]:
+        """手动中止进行中的测试，按是否已经进入机器狗选对应的结束原因"""
         with self._lock:
             if self.state not in ("preparing", "window_open", "running"):
                 return False, "当前无进行中的测试"
@@ -176,6 +185,7 @@ class SessionManager:
             return True, "已中止"
 
     def clear_finished(self) -> bool:
+        """把已结束的会话清回空闲，好让控制台接着开下一局"""
         with self._lock:
             if self.state != "finished":
                 return False
@@ -189,12 +199,14 @@ class SessionManager:
             return True
 
     def stop(self):
+        """通知监控线程退出并等它收尾，进程关掉时调用"""
         self._monitor_stop.set()
         if self._monitor and self._monitor.is_alive():
             self._monitor.join(timeout=1)
 
     # ================= 统计 =================
     def _persist_statistics(self):
+        """把这一局的计数写进统计库，没有引擎或题号就什么都不做"""
         if self.engine is None or self.problem_no is None:
             return
         e = self.engine
@@ -221,6 +233,7 @@ class SessionManager:
 
     # ================= 行为日志 =================
     def _record(self, event: str, detail: str = ""):
+        """记一条生命周期事件，追加进内存日志并顺手写进行为日志文件"""
         seq = len(self._history) + 1
         now_ms = int(time.time() * 1000)
         rec = {
@@ -235,6 +248,7 @@ class SessionManager:
 
     def _record_robot(self, action: str, req: dict, res: EngineResult, http_status: int,
                       diagnostic: str = ""):
+        """记一次机器狗请求，把原始请求体和引擎结果一起写进行为日志"""
         seq = len(self._history) + 1
         now_ms = int(time.time() * 1000)
         rec = {
@@ -252,6 +266,7 @@ class SessionManager:
 
     # ================= 请求处理 =================
     def interface_open(self) -> bool:
+        """判断机器狗接口是不是开着，等待进入和运行中都算开着"""
         return self.state in ("window_open", "running")
 
     def handle(self, path: str, req: dict) -> tuple[int, str] | None:
@@ -278,6 +293,7 @@ class SessionManager:
         return render.render_rejected(int(time.time() * 1000))
 
     def _handle_locked(self, path: str, req: dict) -> tuple[int, str]:
+        """持锁做字段校验、幂等判定和动作分发，返回状态码和响应文本"""
         # ---- 公共标识字段校验 ----
         arena_id = req.get("arena_id")
         robot_id = req.get("robot_id")
@@ -357,6 +373,7 @@ class SessionManager:
         return (status, body)
 
     def _dispatch(self, path: str, req: dict, position, channel) -> tuple[int, str]:
+        """按路径把请求送进引擎，/enter 成功就把状态推到运行中"""
         e = self.engine
         if e is None:
             return (_HTTP_OK, self._err_text("no test run exists"))
@@ -401,6 +418,7 @@ class SessionManager:
         return (_HTTP_BAD_REQUEST, self._err_text("unknown action"))
 
     def _remaining_real_duration(self) -> int:
+        """算还剩多少现实秒可用，取窗口截止和程序截止里更早的那个"""
         now = time.time()
         left_window = self._window_deadline - now
         left_program = (self._program_deadline - now) if self._program_deadline \
@@ -408,6 +426,7 @@ class SessionManager:
         return max(0, int(min(left_window, left_program)))
 
     def _enter_body(self, res: EngineResult, remaining: int) -> str:
+        """拼 /enter 的接受响应，把剩余现实时长一并告诉机器狗"""
         return render.render_accepted(
             "/enter", int(time.time() * 1000), res.virtual_time_us,
             remaining_real_duration_s=remaining)
@@ -421,6 +440,7 @@ class SessionManager:
 
     # ================= 快照 =================
     def snapshot(self) -> dict:
+        """给控制台一份当前会话快照，含状态、剩余时间、场景和引擎摘要"""
         with self._lock:
             now = time.time()
             prepare_remaining = max(0.0, self._prepare_deadline - now)

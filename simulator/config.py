@@ -23,6 +23,7 @@ JAMMER_COUNT_MIN, JAMMER_COUNT_MAX = 10, 16
 
 
 def _default_data_dir() -> Path:
+    """返回项目根目录下的 data 目录，配置和数据都默认放这儿"""
     here = Path(__file__).resolve().parent.parent
     return here / "data"
 
@@ -70,10 +71,12 @@ class SimulationRules:
         return self.arena_radius_m - self.generation_disk_margin_m
 
     def to_json(self) -> dict:
+        """把物理规则导成普通字典，方便写进配置文件"""
         return asdict(self)
 
     @classmethod
     def from_json(cls, d: dict) -> "SimulationRules":
+        """从字典里挑出认得的规则字段，按字段类型转成 float 或 int 再建对象"""
         known = {f.name for f in cls.__dataclass_fields__.values()}
         out = {}
         for k, v in d.items():
@@ -92,6 +95,7 @@ class SimulationRules:
 
 @dataclass
 class Config:
+    """模拟器的整体配置，服务地址、数据目录、测试窗口和物理规则都在这里"""
     # 服务
     robot_host: str = "127.0.0.1"
     robot_port: int = 2026
@@ -111,12 +115,14 @@ class Config:
     rules: SimulationRules = field(default_factory=SimulationRules)
 
     def to_json(self) -> dict:
+        """导出成可写的字典，嵌套的规则单独转一遍"""
         d = asdict(self)
         d["rules"] = self.rules.to_json()
         return d
 
     @classmethod
     def from_json(cls, d: dict) -> "Config":
+        """丢掉不认识的键，把 rules 那一层还原成 SimulationRules 对象"""
         known = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in d.items() if k in known}
         if "rules" in d and isinstance(d["rules"], dict):
@@ -125,12 +131,14 @@ class Config:
 
     @property
     def resolved_data_dir(self) -> Path:
+        """给出实际使用的数据目录，配置里留空就退回默认目录"""
         if self.data_dir:
             return Path(self.data_dir).expanduser().resolve()
         return _default_data_dir()
 
 
 def load_config(path: Path | str | None = None) -> Config:
+    """读配置文件，不给路径就用默认目录下的那份，读不到或解析失败都退回默认配置"""
     cfg_path = Path(path) if path else _default_data_dir() / CONFIG_FILE_NAME
     if cfg_path.exists():
         try:
@@ -142,6 +150,7 @@ def load_config(path: Path | str | None = None) -> Config:
 
 
 def save_config(cfg: Config, path: Path | str | None = None) -> Path:
+    """先写临时文件再改名，避免写一半留下坏配置，返回最终路径"""
     cfg_path = Path(path) if path else cfg.resolved_data_dir / CONFIG_FILE_NAME
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = cfg_path.with_suffix(".json.tmp")

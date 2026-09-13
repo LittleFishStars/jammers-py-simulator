@@ -13,8 +13,10 @@ from .scenario import KIND_DIRECTIONAL, Jammer, Scenario
 
 @dataclass
 class EngineResult:
+    """一次动作的结果，带 outcome 取值、诊断文本和动作走完后的虚拟时间"""
     accepted: bool = False
-    outcome: str = "rejected"          # entered/no_signal/near/direction/success/no_target_in_range/user_exit/rejected
+    outcome: str = "rejected"          # entered/no_signal/near/direction/success
+                                       # no_target_in_range/user_exit/rejected
     diagnostic: str = ""
     virtual_time_us: int = 0            # 官方为 int64 微秒
 
@@ -61,7 +63,9 @@ def _noise_seed(scenario: Scenario) -> int:
 
 
 class Engine:
+    """按官方客户端规则判定机器狗动作并推进虚拟时钟的物理引擎"""
     def __init__(self, rules: SimulationRules, scenario: Scenario):
+        """绑定规则和场景，初始化位置、频道、统计计数和噪声种子"""
         self.rules = rules
         self.scenario = scenario
         self.virtual_time_us = 0    # 官方 int64 微秒，每个动作按整数累加
@@ -90,6 +94,7 @@ class Engine:
 
     # ---- 快照 ----
     def snapshot(self) -> dict:
+        """导出当前状态快照，字段名跟官方状态响应保持一致"""
         return {
             "virtual_time_us": self.virtual_time_us,
             "virtual_time_s": self.virtual_time_s,
@@ -118,6 +123,7 @@ class Engine:
         return int(1e12 * distance_m / speed_um_per_s)
 
     def _jammer_on_channel(self, channel: int) -> Jammer | None:
+        """取这个频道上还没被清除的干扰源，没有就返回 None"""
         for j in self.scenario.jammers:
             if j.channel == channel and not j.cleared:
                 return j
@@ -145,6 +151,7 @@ class Engine:
 
     # ---- 动作 ----
     def enter(self) -> EngineResult:
+        """进入场地，把位置和频道复位到起点，重复进入直接拒绝"""
         if self.entered:
             return EngineResult(outcome="rejected", diagnostic="already_entered")
         self.entered = True
@@ -156,6 +163,7 @@ class Engine:
                             has_position=True, x=self.x, y=self.y)
 
     def measure(self, x: float, y: float, channel: int) -> EngineResult:
+        """走到检测点测量一次，按距离和覆盖角度判定 no_signal、near 还是 direction"""
         move = self._move_duration_us(x, y)
         switch = 0
         if channel != self.channel:
@@ -193,6 +201,7 @@ class Engine:
         return res
 
     def clear(self, x: float, y: float, channel: int) -> EngineResult:
+        """走到清除点尝试清除，落进清除半径里才算成功"""
         move = self._move_duration_us(x, y)
         self.last_x, self.last_y = x, y
         self.x, self.y = x, y
@@ -215,6 +224,7 @@ class Engine:
         )
 
     def exit(self) -> EngineResult:
+        """退出场地，没进入过就返回 rejected"""
         if not self.entered:
             return EngineResult(outcome="rejected", diagnostic="not_entered")
         return EngineResult(accepted=True, outcome="user_exit",
