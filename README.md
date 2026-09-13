@@ -75,7 +75,6 @@ jammers-py/
 ├── run.py                  # 一键启动
 ├── test_api.py             # 端到端自测（59 项协议对齐验证）
 ├── web/                    # 控制台前端（纯 HTML/CSS/JS，中文）
-├── tools/                  # 示向度误差分布图生成脚本
 ├── simulator/
 │   ├── _entry.py           # CLI 入口
 │   ├── config.py           # 配置 + 物理规则（官方默认值）
