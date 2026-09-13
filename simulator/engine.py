@@ -1,20 +1,5 @@
 # -*- coding: utf-8 -*-
-"""模拟引擎：机器狗 enter/measure/clear/exit 的物理判定与虚拟时钟推进
-
-对齐官方《通信接口说明及编程指南》：
-
-/enter 把位置归零到 (0,0)、测向机频道归到 1，不推进虚拟时钟。移动没有独立指令，由 /measure
-或 /clear 带来的位置参数推断，耗时等于直线距离除以 5 m/s。
-
-/measure 的总耗时是移动时间，加上频道切换时间（只有换频道才加 1s），再加检测 5s。结果里
-no_signal 表示没有未清除的干扰源、或者超出接收半径、或者落在定向覆盖范围外；near 表示距离
-不超过 5m 且仍在覆盖范围内；direction 返回 svd_deg，也就是方位角加上确定性空间噪声，两位小数，
-误差在 ±1° 内。
-
-/clear 的耗时是移动时间加上 3s 或 5s，未发现目标 3s、成功 5s。清除半径 20m，且不切换频道。
-
-坐标单位米；角度以正东为 0°，逆时针为正。
-"""
+"""机器狗 enter/measure/clear/exit 的物理判定与虚拟时钟推进"""
 from __future__ import annotations
 
 import hashlib

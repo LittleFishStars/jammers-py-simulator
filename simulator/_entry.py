@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""统一入口逻辑，run.py 与 python3 -m simulator 共用"""
+"""命令行入口，run.py 与 python3 -m simulator 共用"""
 from __future__ import annotations
 
 import argparse

@@ -1,20 +1,5 @@
 # -*- coding: utf-8 -*-
-"""机器狗本地 HTTP 接口，协议版本 robot-protocol-v1
-
-严格对齐官方《通信接口说明及编程指南》第 5 节：
-
-HTTP 层（本模块负责）：
-  - 路径必须精确为 /enter /measure /clear /exit（尾随斜线、查询参数 → 404）
-  - 已知路径非 POST → 405；未知路径 → 404
-  - Content-Type 必须 application/json，且只允许 charset=utf-8 参数 → 否则 415
-  - Content-Encoding 省略或 identity → 否则 415
-  - 请求体 ≤ 65536 字节 → 否则 413
-  - 请求体必须是无 BOM UTF-8 JSON 对象、无重复键、嵌套 ≤ 16 层 → 否则 400
-  - 接口未开放 / 已结束时直接关闭连接，不返回 JSON
-
-业务层（session.SessionManager.handle 负责）：
-  字段校验、arena_id/robot_id/request_id、未知字段、幂等、动作调度，都在那里
-"""
+"""机器狗本地 HTTP 接口，字段与业务规则在 session.SessionManager.handle"""
 from __future__ import annotations
 
 import json

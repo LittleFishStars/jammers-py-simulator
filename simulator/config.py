@@ -1,16 +1,5 @@
 # -*- coding: utf-8 -*-
-"""配置管理：jammers-simulator.config.json
-
-物理规则对齐官方《模拟器使用说明》和《通信接口说明及编程指南》，也就是附件1、附件2。
-写进文档的数值都照抄，没写清的两处从二进制里补：定向覆盖角和示向度误差上限，文档那边被
-格式吃掉成了公式或图片，这里取的是官方 simulation-rules 的默认值
-directional_beam_width_udeg 和 bearing_error_max_udeg。
-
-目标区域是半径 1800 米的圆，圆心 (0,0)，X 朝东 Y 朝北，坐标单位米。移动速度 5 m/s，
-检测 5s，清除未发现 3s、成功 5s，切换频道 1s。虚拟限时 360000s，现实限时 1200s，
-窗口 1500s，倒计时 5s。频道取 1..20，干扰源 10..16 个，接收半径 1000..1500m，
-近距 5m，清除半径 20m。
-"""
+"""配置读写，对应 data/jammers-simulator.config.json"""
 from __future__ import annotations
 
 import json

@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
-"""响应体渲染：官方 robotapi.renderResult 的忠实移植
-
-官方不用 encoding/json，而是手工拼装 JSON 字符串，所以数字的文本形式有严格约定，
-必须逐字节复刻：
-
-  virtual_time_s   → virtualSeconds(µs)：整数秒写成 "%d"，比如 105；
-                     否则 "%d.%06d" 再去掉尾随零，比如 105.500001
-  svd_deg          → "%d.%02d"：恒为两位小数，比如 270.02、270.00
-  max_virtual_duration_s / max_real_duration_s → 整数，360000 / 1200
-  remaining_real_duration_s → 整数
-
-这正是 Python 的 json.dumps 做不到的：它会把 105 写成 105.0、把 270.00 写成 270.0，
-所以这里照官方做法手工拼接；字符串值仍用 json.dumps 转义。
-
-反汇编依据：
-  robotapi.renderResult          VA 0x1404ff7e0
-  robotapi.virtualSeconds        VA 0x1404ffc00
-  格式串 "%d"/"%d.%06d"/"%d.%02d" @ 0x1407f30fa / 0x1407f4879 / 0x1407fd630
-"""
+"""响应体渲染：手工拼 JSON，数字的文本形式有约定，移植自官方 renderResult"""
 from __future__ import annotations
 
 import json

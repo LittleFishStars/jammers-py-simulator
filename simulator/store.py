@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
-"""本地持久化，两块东西
-
-1) practice-statistics-queue.sqlite3 存演练统计记录。schema 精确对齐官方，是逆向提取出来的
-   完整 CREATE TABLE：client_request_id、schema_version 取 'practice-run-statistics-v1'、
-   practice_ticket_sha256、state 取 'queued'/'submitting'/'retry_wait'/'confirmed'/
-   'server_rejected' 之一、attempt_count、next_attempt_at_ms、last_error_code、
-   received_at_ms，外加表级 CHECK。本地没有服务器要投递，落库就是 state='confirmed'。
-2) behavior-logs/ 放行为日志 .jlog 文件。
-"""
+"""本地持久化，存演练统计记录和行为日志"""
 from __future__ import annotations
 
 import hashlib

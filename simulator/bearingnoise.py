@@ -1,33 +1,5 @@
 # -*- coding: utf-8 -*-
-"""示向度误差噪声：官方 `jammers/client/internal/bearingnoise` 包的忠实移植
-
-官方模型是确定性空间哈希噪声，既不是逐次随机，也不是高斯：
-
-    grid(seed, salt, ix, iy) = 2u - 1,
-        u = BE_uint64( BLAKE2b-64("%d:%d:%d:%d" % (seed, salt, ix, iy)) ) / 2^64
-
-每个网格节点的值都服从 U(-1, 1)，节点之间相互独立。误差场由这些节点的值插值而成，
-用的是 smoothstep 双线性插值：
-
-    ErrorDegrees(seed, salt, x, y) = 双线性插值( grid 四角 )
-        网格间距 150 m，ix = floor(x/150)，iy = floor(y/150)
-        插值权重 a = smoothstep(frac(x/150)) = fx^2 (3 - 2 fx)
-
-下面几条性质对建模有直接影响，别把它当普通随机噪声处理：
-
-  * 值域严格为 (-1°, 1°)，与规则字段 bearing_error_max_udeg = 1° 一致
-  * 均值 0；标准差 = sqrt(Σw^2 / 3) ∈ [0.289°, 0.577°]，典型 ≈ 0.4°
-  * 误差只由噪声种子、频道、测量位置三者决定。同一位置同一频道重复测量，误差完全相同，
-    取平均无法减小误差
-  * 相关长度 ≈ 150 m，同一网格内的多点误差是同向系统偏差，不能相互抵消
-  * salt 取请求频道，所以不同频道是相互独立的误差场
-
-反汇编依据（jammers-simulator.exe）：
-  bearingnoise.ErrorDegrees            VA 0x1404ee680
-  bearingnoise.QuantizeBearingHundredths VA 0x1404ee900
-  bearingnoise.grid                    VA 0x1404eeac0
-  常量 2^-53 / 2π / 150.0 / 3.0 / 1.0 / 100.0 均已逐一核对
-"""
+"""示向度误差噪声：确定性空间哈希噪声，移植自官方 bearingnoise"""
 from __future__ import annotations
 
 import hashlib

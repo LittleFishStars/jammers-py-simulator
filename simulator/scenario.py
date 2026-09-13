@@ -1,14 +1,5 @@
 # -*- coding: utf-8 -*-
-"""干扰源场景模型与生成器，schema 版本 scenario-v1
-
-对齐官方《通信接口说明及编程指南》：
-
-  - 目标区域是半径 1800 米的圆，圆心 (0,0)；干扰源都落在 1770 米的生成圆盘里，内缩了 30m
-  - 干扰源 10..16 个；频道 1..20 且唯一
-  - 有效接收半径 1000..1500 米
-  - 分全向 omni 与定向 directional 两类；定向覆盖角由 rules 提供，见 config.directional_beam_width_deg，默认 180°
-  - 位置单位米，x 朝东、y 朝北
-"""
+"""干扰源场景模型与生成器，schema 版本 scenario-v1"""
 from __future__ import annotations
 
 import math

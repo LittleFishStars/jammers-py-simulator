@@ -1,18 +1,5 @@
 # -*- coding: utf-8 -*-
-"""测试会话状态机与机器狗请求的业务处理
-
-对齐官方《通信接口说明及编程指南》。
-
-状态机走这么一条线：idle → preparing，5s 倒计时 → window_open，25 分钟窗口、接口开放 →
-running，/enter 成功之后开始算 20 分钟程序计时 → finished。
-
-实际现实截止时间取 min(窗口截止, /enter 成功后 20 分钟)。虚拟时限 360000s。
-
-请求这一层管的是 arena_id/robot_id/request_id、未知字段、幂等和并发防护。标识字段缺失、类型
-不对、超长，以及 position、channel 不合法，都回 400；arena_id 或 robot_id 不匹配、带上未知
-字段，回 200 加 accepted=false，不占用 request_id；同一个 request_id 换了内容重发，或者两个
-动作撞在一起，回 409；幂等记录用满 100000 条，回 429。
-"""
+"""测试会话状态机，机器狗请求的字段校验、幂等与动作调度"""
 from __future__ import annotations
 
 import math

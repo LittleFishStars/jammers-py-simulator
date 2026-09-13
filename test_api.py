@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""端到端自测：官方机器人协议对齐验证。
-
-覆盖官方《通信接口说明及编程指南》：
-  接口未开放直接断连、enter 五字段响应、measure 三结果与 svd_deg、
-  clear 两结果、exit、幂等（重放/409）、未知字段、robot_id 不匹配、
-  坐标/频道校验、Content-Type 415、方法 405、路径 404、统计落库、中止。
-
-用法：python3 test_api.py    （在 jammers-py/ 目录下运行）
-"""
+"""端到端自测，核对本地 HTTP 接口与官方机器人协议是否一致"""
 from __future__ import annotations
 
 import http.client
