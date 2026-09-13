@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import random
 import secrets
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 from .config import SimulationRules
 
