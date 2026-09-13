@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
-"""本地持久化。
+"""本地持久化，两块东西
 
-1) practice-statistics-queue.sqlite3 —— 演练统计记录。
-   schema 精确对齐官方（逆向提取完整 CREATE TABLE）：
-   client_request_id / schema_version='practice-run-statistics-v1' /
-   practice_ticket_sha256 / state('queued','submitting','retry_wait',
-   'confirmed','server_rejected') / attempt_count / next_attempt_at_ms /
-   last_error_code / received_at_ms / 表级 CHECK 等。本地无服务器，
-   落库即 state='confirmed'。
-2) behavior-logs/ —— 行为日志 .jlog 文件。
+1) practice-statistics-queue.sqlite3 存演练统计记录。schema 精确对齐官方，是逆向提取出来的
+   完整 CREATE TABLE：client_request_id、schema_version 取 'practice-run-statistics-v1'、
+   practice_ticket_sha256、state 取 'queued'/'submitting'/'retry_wait'/'confirmed'/
+   'server_rejected' 之一、attempt_count、next_attempt_at_ms、last_error_code、
+   received_at_ms，外加表级 CHECK。本地没有服务器要投递，落库就是 state='confirmed'。
+2) behavior-logs/ 放行为日志 .jlog 文件。
 """
 from __future__ import annotations
 
@@ -57,7 +55,7 @@ CREATE INDEX IF NOT EXISTS practice_statistics_due
 
 
 class PracticeStatsStore:
-    """演练统计 SQLite 存储（线程安全）。"""
+    """演练统计用的 SQLite 存储，一把锁护住连接，线程安全"""
 
     def __init__(self, data_dir: Path):
         self.data_dir = Path(data_dir)
@@ -83,7 +81,7 @@ class PracticeStatsStore:
         return hashlib.sha256(uuid.uuid4().bytes).hexdigest()
 
     def new_case_code(self) -> str:
-        """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码。"""
+        """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码"""
         s = uuid.uuid4().hex[:16].upper()
         return "-".join(s[i:i + 4] for i in range(0, 16, 4))
 
@@ -91,7 +89,7 @@ class PracticeStatsStore:
         return self.insert_result(rec)
 
     def append_behavior_log(self, problem_no: int, run_no: int, rec: dict):
-        """追加行为日志事件（惰性建文件 + 写头）。"""
+        """追加一条行为日志事件，文件惰性创建，建的时候顺手写表头"""
         key = (problem_no, run_no)
         with self._lock:
             if self._log_key != key or self._log_path is None:
@@ -143,7 +141,7 @@ class PracticeStatsStore:
                     int(rec.get("channel_switch_count", 0)),
                     int(rec.get("clear_failure_count", 0)),
                     int(rec.get("jammer_count", 0)),
-                    "confirmed",  # 本地版落库即确认（无服务器）
+                    "confirmed",  # 本地版没有服务器，落库直接确认
                     0,            # attempt_count
                     0,            # next_attempt_at_ms
                     "",           # last_error_code
@@ -180,7 +178,7 @@ def _rand_sha256() -> str:
 
 
 def new_case_code() -> str:
-    """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码。"""
+    """生成 XXXX-XXXX-XXXX-XXXX 形式的案例编码"""
     s = uuid.uuid4().hex[:16].upper()
     return "-".join(s[i:i + 4] for i in range(0, 16, 4))
 

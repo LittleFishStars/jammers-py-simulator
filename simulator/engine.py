@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""模拟引擎：机器狗 enter/measure/clear/exit 的物理判定与虚拟时钟推进。
+"""模拟引擎：机器狗 enter/measure/clear/exit 的物理判定与虚拟时钟推进
 
 对齐官方《通信接口说明及编程指南》：
-  - /enter：初始位置 (0,0)，测向机初始频道 1，不推进虚拟时钟
-  - 移动由 /measure 或 /clear 的位置参数自动推断，耗时 = 直线距离 / 5 m/s
-  - /measure：移动耗时 + 频道切换耗时(不同频道 +1s) + 检测 5s
-      no_signal（无未清除干扰源/超出接收半径/定向覆盖范围外）
-      near（距离 ≤5m 且在覆盖范围内）
-      direction（返回 svd_deg = 方位角 + 确定性空间噪声，两位小数；±1°）
-  - /clear：移动耗时 + 3s（未发现）/ 5s（成功）；清除半径 20m，不切换频道
-  - 坐标单位：米；角度：正东 0°，逆时针为正
+
+/enter 把位置归零到 (0,0)、测向机频道归到 1，不推进虚拟时钟。移动没有独立指令，由 /measure
+或 /clear 带来的位置参数推断，耗时等于直线距离除以 5 m/s。
+
+/measure 的总耗时是移动时间，加上频道切换时间（只有换频道才加 1s），再加检测 5s。结果里
+no_signal 表示没有未清除的干扰源、或者超出接收半径、或者落在定向覆盖范围外；near 表示距离
+不超过 5m 且仍在覆盖范围内；direction 返回 svd_deg，也就是方位角加上确定性空间噪声，两位小数，
+误差在 ±1° 内。
+
+/clear 的耗时是移动时间加上 3s 或 5s，未发现目标 3s、成功 5s。清除半径 20m，且不切换频道。
+
+坐标单位米；角度以正东为 0°，逆时针为正。
 """
 from __future__ import annotations
 
@@ -31,37 +35,37 @@ class EngineResult:
 
     @property
     def virtual_time_s(self) -> float:
-        """微秒整数对应的秒（仅用于展示；响应体请用 render.virtual_seconds）。"""
+        """微秒整数对应的秒，只给展示用；响应体请走 render.virtual_seconds"""
         return self.virtual_time_us / 1_000_000
-    svd_deg: float | None = None       # HTTP 响应字段（direction 时返回）
+    svd_deg: float | None = None       # HTTP 响应字段，只有 direction 才返回
     has_position: bool = False
     x: float = 0.0
     y: float = 0.0
     has_channel: bool = False
     channel: int = 0
     has_bearing: bool = False
-    bearing_hundredths: int = 0        # 行为日志字段（百分之一度，整数）
+    bearing_hundredths: int = 0        # 行为日志字段，百分之一度的整数
     cleared_jammer_channel: int | None = None
     detected_jammer_channels: list[int] = field(default_factory=list)
 
 
 def _normalize_bearing(deg: float) -> float:
-    """归一化到 [0, 360)。"""
+    """把角度绕回 [0, 360)"""
     d = deg % 360.0
     return d if d >= 0 else d + 360.0
 
 
 def _angle_diff(a: float, b: float) -> float:
-    """两个方位角的最小角度差（0..180）。"""
+    """两个方位角之间的最小夹角，落在 0..180"""
     d = abs(a - b) % 360.0
     return d if d <= 180.0 else 360.0 - d
 
 
 def _noise_seed(scenario: Scenario) -> int:
-    """由场景 noise_seed_hex 派生 64 位噪声种子（官方为 uint64）。
+    """由场景 noise_seed_hex 派生出 64 位噪声种子，官方那边是 uint64
 
-    noise_seed_hex 为 16 位十六进制；缺失或非法时退化为对场景标识做
-    BLAKE2b-64 摘要，保证同一场景误差场仍然可复现。
+    noise_seed_hex 是 16 位十六进制。缺失或者不合法时，退化成对场景标识做一次
+    BLAKE2b-64 摘要，这样同一个场景的误差场照样可复现
     """
     raw = (scenario.noise_seed_hex or "").strip()
     if raw:
@@ -78,15 +82,15 @@ class Engine:
     def __init__(self, rules: SimulationRules, scenario: Scenario):
         self.rules = rules
         self.scenario = scenario
-        self.virtual_time_us = 0    # 官方 int64 微秒，逐动作整数累加
+        self.virtual_time_us = 0    # 官方 int64 微秒，每个动作按整数累加
         self.x = 0.0
         self.y = 0.0
         self.channel = 1           # 测向机当前频道
         self.entered = False
-        self.last_x = 0.0          # 上一次合法动作位置
+        self.last_x = 0.0          # 上一次合法动作的位置
         self.last_y = 0.0
 
-        # 统计（对齐官方统计表列）
+        # 统计，对齐官方统计表的列
         self.entered = False
         self.cleared_jammer_count = 0
         self.measure_accepted_count = 0
@@ -94,12 +98,12 @@ class Engine:
         self.clear_failure_count = 0
         self.jammer_count = len(scenario.jammers)
 
-        # 示向度噪声种子（对应官方 Engine+0x80 的场景级种子）
+        # 示向度噪声种子，对应官方 Engine+0x80 的场景级种子
         self.seed = _noise_seed(scenario)
 
     @property
     def virtual_time_s(self) -> float:
-        """微秒整数对应的秒（仅用于展示/日志；响应体请用 render.virtual_seconds）。"""
+        """微秒整数对应的秒，只给展示和日志用；响应体请用 render.virtual_seconds"""
         return self.virtual_time_us / 1_000_000
 
     # ---- 快照 ----
@@ -121,15 +125,15 @@ class Engine:
 
     # ---- 工具 ----
     def _us(self, seconds: float) -> int:
-        """秒 → 微秒整数（官方规则字段本身即整数微秒）。"""
+        """秒转成微秒整数，官方规则字段本身就是整数微秒"""
         return int(round(seconds * 1_000_000))
 
     def _move_duration_us(self, x: float, y: float) -> int:
-        """移动耗时（微秒）。
+        """移动耗时，单位微秒
 
-        官方 simcore.(*Engine).moveTo：int64(1e12 * 距离m / speed_um_per_s)，
-        先乘 1e12 再除以「微米每秒」的速度，结果向零截断为整数微秒。
-        浮点运算顺序必须保持一致，否则末位微秒可能有差异。
+        官方 simcore.(*Engine).moveTo 的算法是 int64(1e12 * 距离m / speed_um_per_s)：
+        先乘 1e12，再除以以微米每秒表示的速度，结果向零截断成整数微秒。浮点运算的
+        先后顺序必须原样保留，换个顺序末位微秒就可能不一样
         """
         distance_m = math.hypot(x - self.last_x, y - self.last_y)
         speed_um_per_s = self._us(self.rules.move_speed_m_per_s)
@@ -142,11 +146,11 @@ class Engine:
         return None
 
     def _in_directional_coverage(self, jammer: Jammer, x: float, y: float) -> bool:
-        """检测点是否在定向干扰源有效覆盖角度范围内（含边界）。
+        """检测点是否落在定向干扰源的有效覆盖角度之内，边界算在内
 
-        官方 simcore.directionalCoverage：全向源直接覆盖；否则
-        |Δ| <= 90° + 1e-9（半角 90°，全角 180°），Δ 为干扰源→检测点方位角
-        与干扰源朝向之差。注意该函数只判角度，距离由接收半径另行判定。
+        对应官方 simcore.directionalCoverage。全向源直接算覆盖；定向源判
+        |Δ| <= 90° + 1e-9，半角 90°、全角 180°，Δ 是干扰源指向检测点的方位角
+        与干扰源朝向之差。注意这个函数只管角度，距离由接收半径另外判
         """
         if jammer.kind != KIND_DIRECTIONAL or jammer.direction_deg is None:
             return True
@@ -156,11 +160,11 @@ class Engine:
 
     def _svd_deg(self, jammer: Jammer, x: float, y: float,
                  channel: int) -> tuple[float, int]:
-        """检测点指向干扰源的方位角 + 确定性空间噪声。
+        """检测点指向干扰源的方位角，再加一层确定性空间噪声
 
-        返回 (svd_deg 保留两位小数, bearing_hundredths 百分之一度整数)。
-        误差只取决于 (噪声种子, 频道, 测量位置)，同一位置同一频道重复测量
-        误差完全相同，取平均无法减小误差。
+        返回 (svd_deg 保留两位小数, bearing_hundredths 百分之一度的整数)。
+        误差只跟噪声种子、频道、测量位置有关，同一位置同一频道重复测误差一模一样，
+        取平均压不下去
         """
         true_bearing = _normalize_bearing(
             math.degrees(math.atan2(jammer.y_m - y, jammer.x_m - x)))

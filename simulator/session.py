@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
-"""测试会话状态机 + 机器狗请求业务处理。
+"""测试会话状态机与机器狗请求的业务处理
 
-对齐官方《通信接口说明及编程指南》：
-  状态机：idle → preparing(5s 倒计时) → window_open(25min 窗口, 开放接口)
-          → running(/enter 成功后, 20min 程序计时) → finished
-  实际现实截止 = min(窗口截止, /enter 成功后 20 分钟)
-  虚拟时限 360000s
-  请求校验：arena_id/robot_id/request_id；未知字段；幂等；并发防护
+对齐官方《通信接口说明及编程指南》。
+
+状态机走这么一条线：idle → preparing，5s 倒计时 → window_open，25 分钟窗口、接口开放 →
+running，/enter 成功之后开始算 20 分钟程序计时 → finished。
+
+实际现实截止时间取 min(窗口截止, /enter 成功后 20 分钟)。虚拟时限 360000s。
+
+请求这一层管的是 arena_id/robot_id/request_id、未知字段、幂等和并发防护。标识字段缺失、类型
+不对、超长，以及 position、channel 不合法，都回 400；arena_id 或 robot_id 不匹配、带上未知
+字段，回 200 加 accepted=false，不占用 request_id；同一个 request_id 换了内容重发，或者两个
+动作撞在一起，回 409；幂等记录用满 100000 条，回 429。
 """
 from __future__ import annotations
 
@@ -23,7 +28,7 @@ from .engine import Engine, EngineResult
 from .scenario import Scenario, generate_scenario
 from .store import PracticeStatsStore
 
-# 终态原因（对齐官方枚举）
+# 终态原因，对齐官方枚举
 END_USER_EXIT = "user_exit"
 END_MANUAL_ABORT_BEFORE_ENTER = "manual_abort_before_enter"
 END_MANUAL_ABORT_RUNNING = "manual_abort_running"
@@ -60,7 +65,7 @@ def _has_invalid_char(s: str) -> bool:
 
 
 def _is_int_number(v) -> bool:
-    """number 且数值恰好为整数（排除 bool）。"""
+    """判断是不是数值上恰好等于整数的 number，bool 要排掉"""
     if isinstance(v, bool):
         return False
     if isinstance(v, int):
@@ -75,7 +80,7 @@ class _IdemRecord:
     path: str
     canonical: str
     status: int
-    body: str          # 已渲染的 JSON 文本（官方 renderResult 格式）
+    body: str          # 已经渲染好的 JSON 文本，格式同官方 renderResult
 
 
 class SessionManager:
@@ -101,7 +106,7 @@ class SessionManager:
         self._started_real_ms = 0
 
         self._idem: dict[str, _IdemRecord] = {}
-        self._history: list[dict] = []      # 行为日志事件（内存态，落盘由 store 负责）
+        self._history: list[dict] = []      # 行为日志事件，内存态，落盘交给 store
 
     # ================= 状态机 =================
     def start(self, problem_no: int, scenario: Scenario | None = None) -> tuple[bool, str]:
@@ -238,7 +243,7 @@ class SessionManager:
         if self.engine is not None:
             rec["virtual_time_us"] = self.engine.virtual_time_us
         self._history.append(rec)
-        # 同步落盘（追加行）
+        # 顺手落盘，按追加行的写法
         self.store.append_behavior_log(self.problem_no, self.run_no, rec)
 
     def _record_robot(self, action: str, req: dict, res: EngineResult, http_status: int,
@@ -263,10 +268,10 @@ class SessionManager:
         return self.state in ("window_open", "running")
 
     def handle(self, path: str, req: dict) -> tuple[int, str] | None:
-        """处理一个已通过 HTTP 层校验的请求。
+        """处理一个已通过 HTTP 层校验的请求
 
-        返回 (status, json_text) 或 None（接口未开放/已结束 → 关闭连接，无 JSON）。
-        响应体为官方 renderResult 同款手工拼装文本，数字格式逐字节对齐。
+        返回 (status, json_text)；接口未开放或者测试已结束时返回 None，那种情况直接关连接，
+        不给 JSON。响应体是官方 renderResult 同款的手工拼装文本，数字格式逐字节对齐。
         """
         if not self.interface_open():
             return None  # 接口未开放/已结束：直接关闭连接，无 JSON
@@ -281,11 +286,11 @@ class SessionManager:
             self._lock.release()
 
     def _us(self, seconds: float) -> int:
-        """秒 → 微秒整数（官方规则字段本身即整数微秒）。"""
+        """秒 → 微秒整数，官方规则字段本身就是整数微秒"""
         return int(round(seconds * 1_000_000))
 
     def _err_text(self, diagnostic: str = "") -> str:
-        """accepted=false：官方恒为固定 3 字段，且 virtual_time_s 为字面量 0。"""
+        """accepted=false：官方恒为固定 3 字段，且 virtual_time_s 是字面量 0"""
         self._last_diagnostic = diagnostic
         return render.render_rejected(int(time.time() * 1000))
 
@@ -307,13 +312,13 @@ class SessionManager:
             if _has_invalid_char(val):
                 return (_HTTP_BAD_REQUEST, self._err_text(f"field {name} contains invalid characters"))
 
-        # arena_id / robot_id 不匹配 → 200 accepted=false（不占用 request_id）
+        # arena_id / robot_id 不匹配 → 200 accepted=false，这一档不占用 request_id
         if arena_id != "default":
             return (_HTTP_OK, self._err_text("arena_id mismatch"))
         if robot_id != self.cfg.team_no:
             return (_HTTP_OK, self._err_text("robot_id mismatch"))
 
-        # ---- 未知字段校验（不占用 request_id）----
+        # ---- 未知字段校验，这一档也不占用 request_id ----
         allowed = {"arena_id", "robot_id", "request_id"}
         if path in ("/measure", "/clear"):
             allowed |= {"position", "channel"}
@@ -361,7 +366,7 @@ class SessionManager:
         # ---- 动作调度 ----
         status, body = self._dispatch(path, req, position, channel)
 
-        # 只有业务接受（accepted=true）才占用 request_id
+        # 只有业务接受，也就是 accepted=true，才占用 request_id
         # 官方 rejected 响应恒以 {"accepted":false 开头，据此判定即可
         if not body.startswith('{"accepted":false'):
             self._idem[request_id] = _IdemRecord(path, canonical, status, body)
@@ -424,7 +429,7 @@ class SessionManager:
             remaining_real_duration_s=remaining)
 
     def _action_body(self, path: str, res: EngineResult) -> str:
-        """measure/clear/exit 的响应体（官方 renderResult 文本）。"""
+        """measure/clear/exit 的响应体，就是官方 renderResult 的那段文本"""
         return render.render_accepted(
             path, int(time.time() * 1000), res.virtual_time_us,
             result=res.outcome,

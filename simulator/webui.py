@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Web 控制台服务器（127.0.0.1:<web_port>，默认 8080）。
+"""Web 控制台服务器，监听 127.0.0.1:<web_port>，默认 8080
 
-- 静态页面：/、/app.js、/style.css（来自项目 web/ 目录）
+- 静态页面 /、/app.js、/style.css，文件都从项目 web/ 目录取
 - REST API：
-    GET  /api/state        全量状态（会话/场景/统计/日志尾部/配置）
+    GET  /api/state        全量状态，含会话、场景、统计、日志尾部和配置
     POST /api/start        启动演练测试 {problem_no, scenario:{...}?}
     POST /api/abort        中止当前测试
     POST /api/clear        清除已完成测试
     POST /api/scenario     重新生成/替换场景 {…}
-    POST /api/config       更新配置（部分项需重启生效）
+    POST /api/config       更新配置，部分项需重启进程才生效
     GET  /api/history      历史统计
     POST /api/history/clear 清空历史
 """

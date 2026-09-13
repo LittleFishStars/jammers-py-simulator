@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""机器狗本地 HTTP 接口（robot-protocol-v1）。
+"""机器狗本地 HTTP 接口，协议版本 robot-protocol-v1
 
 严格对齐官方《通信接口说明及编程指南》第 5 节：
 
@@ -13,7 +13,7 @@ HTTP 层（本模块负责）：
   - 接口未开放 / 已结束时直接关闭连接，不返回 JSON
 
 业务层（session.SessionManager.handle 负责）：
-  字段校验、arena_id/robot_id/request_id、未知字段、幂等、动作调度。
+  字段校验、arena_id/robot_id/request_id、未知字段、幂等、动作调度，都在那里
 """
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def _json_depth(obj, depth: int = 1) -> int:
 
 
 def strict_loads(raw: bytes):
-    """严格解析请求体，失败抛 ValueError。"""
+    """严格解析请求体，失败抛 ValueError"""
     if raw.startswith(b"\xef\xbb\xbf"):
         raise ValueError("BOM not allowed")
     try:
@@ -126,7 +126,7 @@ class RobotHandler(BaseHTTPRequestHandler):
 
     # ---- 基础 ----
     def _send(self, code: int, text: str):
-        """text 为已按官方格式渲染好的 JSON 文本（见 simulator.render）。"""
+        """text 是已按官方格式渲染好的 JSON 文本，见 simulator.render"""
         body = text.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -143,7 +143,7 @@ class RobotHandler(BaseHTTPRequestHandler):
         return int(time.time() * 1000)
 
     def _close_no_response(self):
-        """接口未开放 / 已结束：直接关闭连接，不返回 JSON。"""
+        """接口未开放 / 已结束：直接关闭连接，不返回 JSON"""
         self.close_connection = True
 
     # ---- 路由 ----
@@ -151,7 +151,7 @@ class RobotHandler(BaseHTTPRequestHandler):
         return self.path
 
     def _check_content_headers(self) -> bool:
-        """返回 False 表示已写出错误响应。"""
+        """返回 False 表示已经写出错误响应"""
         # Content-Type
         ctype = self.headers.get("Content-Type")
         if ctype is None:
@@ -179,7 +179,7 @@ class RobotHandler(BaseHTTPRequestHandler):
         return True
 
     def _read_body(self) -> bytes | None:
-        """返回 body，或在错误时已写出响应并返回 None。"""
+        """返回 body；出错时已经写出响应，返回 None"""
         length_raw = self.headers.get("Content-Length")
         if length_raw is None:
             self._err(HTTP_BAD_REQUEST)

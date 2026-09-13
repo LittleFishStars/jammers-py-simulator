@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 """配置管理：jammers-simulator.config.json
 
-物理规则对齐官方《模拟器使用说明》/《通信接口说明及编程指南》（附件1、附件2）：
-  - 目标区域：半径 1800 米圆形，圆心 (0,0)，X 东 Y 北，坐标单位米
-  - 移动速度 5 m/s；检测 5s；清除未发现 3s/成功 5s；切换频道 1s
-  - 虚拟限时 360000s；现实限时 1200s；窗口 1500s；倒计时 5s
-  - 频道 1..20；干扰源 10..16；接收半径 1000..1500m；近距 5m；清除 20m
-  - 定向覆盖角 60°、示向度误差 ±0.5°（文档中该两数值被格式丢失，采用官方
-    二进制 simulation-rules 默认值 directional_beam_width_udeg / bearing_error_max_udeg）
+物理规则对齐官方《模拟器使用说明》和《通信接口说明及编程指南》，也就是附件1、附件2。
+写进文档的数值都照抄，没写清的两处从二进制里补：定向覆盖角和示向度误差上限，文档那边被
+格式吃掉成了公式或图片，这里取的是官方 simulation-rules 的默认值
+directional_beam_width_udeg 和 bearing_error_max_udeg。
+
+目标区域是半径 1800 米的圆，圆心 (0,0)，X 朝东 Y 朝北，坐标单位米。移动速度 5 m/s，
+检测 5s，清除未发现 3s、成功 5s，切换频道 1s。虚拟限时 360000s，现实限时 1200s，
+窗口 1500s，倒计时 5s。频道取 1..20，干扰源 10..16 个，接收半径 1000..1500m，
+近距 5m，清除半径 20m。
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ MAX_VIRTUAL_DURATION_S = 360_000      # 虚拟限时 100 小时
 MAX_PROGRAM_DURATION_S = 1_200        # 现实限时 20 分钟
 WINDOW_SECONDS = 1_500                # 测试窗口 25 分钟
 COUNTDOWN_SECONDS = 5                 # 准备倒计时
-COORD_ABS_MAX_M = 2_000_000           # 坐标分量绝对值上限（米）
+COORD_ABS_MAX_M = 2_000_000           # 单个坐标分量的绝对值上限，单位米
 BODY_MAX_BYTES = 65_536               # 请求体上限
 CHANNEL_MIN, CHANNEL_MAX = 1, 20      # 有效频道范围
 JAMMER_COUNT_MIN, JAMMER_COUNT_MAX = 10, 16
@@ -38,11 +40,11 @@ def _default_data_dir() -> Path:
 
 @dataclass
 class SimulationRules:
-    """物理规则（对应官方题目设定，可配置以便联调）。"""
+    """物理规则，对应官方题目设定，做成可配置是为了方便联调"""
     # 目标区域
     arena_radius_m: float = 1_800.0
     coord_abs_max_m: float = 2_000_000.0
-    # 生成圆盘在目标区域基础上内缩的边距（官方 1800-30=1770 m）
+    # 生成圆盘在目标区域基础上内缩的边距，官方是 1800-30=1770 m
     generation_disk_margin_m: float = 30.0
     # 干扰源
     jammer_count_min: int = 10
@@ -51,14 +53,14 @@ class SimulationRules:
     channel_max: int = 20
     receive_radius_min_m: float = 1_000.0   # 有效接收半径下限
     receive_radius_max_m: float = 1_500.0   # 上限
-    # 定向有效覆盖角：全角 180°（半角 90°，含边界）。
+    # 定向有效覆盖角：全角 180°，半角 90°，边界算在内。
     # 依据 simcore.directionalCoverage 反汇编：硬编码比较 |Δ| <= 90.000000001，
     # 对应规则字段 directional_beam_width_udeg = 180000000。
     directional_beam_width_deg: float = 180.0
-    # 示向度误差上限（±1°）：由 bearingnoise 噪声值域 U(-1,1) 直接决定，
+    # 示向度误差上限 ±1°：由 bearingnoise 噪声值域 U(-1,1) 直接决定，
     # 对应规则字段 bearing_error_max_udeg = 1000000。
     bearing_error_max_deg: float = 1.0
-    # 噪声网格间距（米）：对应规则字段 bearing_noise_grid_um = 150000000。
+    # 噪声网格间距，单位米：对应规则字段 bearing_noise_grid_um = 150000000。
     bearing_noise_grid_m: float = 150.0
     # 判定阈值
     near_distance_m: float = 5.0            # 近距离阈值
@@ -75,7 +77,7 @@ class SimulationRules:
 
     @property
     def generation_disk_radius_m(self) -> float:
-        """干扰源采样/校验圆盘半径 = 目标区域半径 - 内缩边距（官方 1770 m）。"""
+        """干扰源采样和校验用的圆盘半径，等于目标区域半径减去内缩边距，官方是 1770 m"""
         return self.arena_radius_m - self.generation_disk_margin_m
 
     def to_json(self) -> dict:
@@ -107,13 +109,13 @@ class Config:
     web_host: str = "127.0.0.1"
     web_port: int = 8080
     # 数据
-    data_dir: str = ""            # 留空则用默认（项目内 ./data）
+    data_dir: str = ""            # 留空就用默认的，项目内 ./data
     # 测试窗口 / 准备倒计时
     window_seconds: int = WINDOW_SECONDS
     countdown_seconds: int = COUNTDOWN_SECONDS
-    # 身份（本地标识，作为 robot_id 校验基准）
+    # 身份，本地标识，拿来当 robot_id 的校验基准
     team_no: str = "local-team"
-    # 服务器（保留字段，本地版不连接）
+    # 服务器，保留字段，本地版不连
     server_origin: str = ""
     robot_protocol_version: str = ROBOT_PROTOCOL_VERSION
     # 物理规则

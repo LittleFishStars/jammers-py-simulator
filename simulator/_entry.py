@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""统一入口逻辑（run.py 与 python3 -m simulator 共用）。"""
+"""统一入口逻辑，run.py 与 python3 -m simulator 共用"""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--web-host", default=None, help="控制台监听地址（默认 127.0.0.1）")
     p.add_argument("--web-port", type=int, default=None, help="控制台端口（默认 8080）")
     p.add_argument("--window", type=int, default=None, help="测试窗口秒数（默认 1500）")
-    p.add_argument("--countdown", type=int, default=None, help="准备倒计时秒数（默认 15）")
+    p.add_argument("--countdown", type=int, default=None, help="准备倒计时秒数（缺省取配置，默认 5）")
     p.add_argument("--team", default=None, help="参赛队号（本地标识）")
     p.add_argument("--config", default=None, help="配置文件路径（默认 data/jammers-simulator.config.json）")
     p.add_argument("--demo", action="store_true", help="使用固定演示场景（便于确定性联调）")

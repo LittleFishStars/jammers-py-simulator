@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""干扰源场景模型与生成器（scenario-v1）。
+"""干扰源场景模型与生成器，schema 版本 scenario-v1
 
 对齐官方《通信接口说明及编程指南》：
-  - 目标区域：半径 1800 米圆形，圆心 (0,0)；干扰源生成圆盘 1770 米（内缩 30m）
+
+  - 目标区域是半径 1800 米的圆，圆心 (0,0)；干扰源都落在 1770 米的生成圆盘里，内缩了 30m
   - 干扰源 10..16 个；频道 1..20 且唯一
   - 有效接收半径 1000..1500 米
-  - 分全向（omni）与定向（directional）；定向覆盖角由 rules 提供（默认 60°）
-  - 位置单位：米（x 东、y 北）
+  - 分全向 omni 与定向 directional 两类；定向覆盖角由 rules 提供，见 config.directional_beam_width_deg，默认 180°
+  - 位置单位米，x 朝东、y 朝北
 """
 from __future__ import annotations
 
@@ -28,9 +29,9 @@ class Jammer:
     x_m: float
     y_m: float
     receive_m: float             # 有效接收半径（1000..1500）
-    radius_m: float              # 干扰源物理半径（文档未给出与接收半径关系，本地以 receive 近似）
-    direction_deg: float | None  # 定向源朝向（omni 必须为 None）
-    theta_deg: float | None = None  # 保留字段（官方 scenario-v1 存在，含义见题目）
+    radius_m: float              # 干扰源物理半径；文档没给它与接收半径的关系，本地拿 receive 顶替
+    direction_deg: float | None  # 定向源朝向；omni 必须为 None
+    theta_deg: float | None = None  # 保留字段，官方 scenario-v1 里有，含义见题目
     cleared: bool = False
 
     def to_json(self) -> dict:
@@ -135,14 +136,12 @@ def _rand_seed_hex(n_bytes: int) -> str:
 
 
 def generate_scenario(rules: SimulationRules, problem_no: int, seed: int | None = None) -> Scenario:
-    """在生成圆盘（默认 1770m）内生成 10..16 个干扰源。
+    """在生成圆盘里撒 10..16 个干扰源，圆盘默认 1770m
 
-    位置为**圆盘面积均匀分布**：r = R·sqrt(u)、theta = 2πu₂（官方 uniform_disk_area）。
-    频道从 1..20 中随机抽取后升序排列（唯一且严格递增）。
-    receive 在 [1000,1500] 米随机。
-    定向源数量对齐官方 GeneratePractice：
-      - 问题3：0 个（纯全向）
-      - 问题4：至少 1 个（随机 1..n）
+    位置取圆盘面积均匀分布：r = R·sqrt(u)、theta = 2πu₂，官方那边叫 uniform_disk_area。
+    频道从 1..20 里随机抽 n 个再升序排，唯一且严格递增。receive 在 [1000,1500] 米之间随机。
+    定向源的数量对齐官方 GeneratePractice：问题3 一个都不给，纯全向；问题4 至少 1 个，
+    在 1..n 里随机。
     """
     rng = random.Random(seed)
     n = rng.randint(int(rules.jammer_count_min), int(rules.jammer_count_max))
@@ -156,7 +155,7 @@ def generate_scenario(rules: SimulationRules, problem_no: int, seed: int | None 
 
     jammers = []
     for ch, kind in zip(channels, kinds):
-        # 圆盘面积均匀分布：r = R·sqrt(u)，theta 均匀（开方是关键，保证面密度恒定）
+        # 圆盘面积均匀分布：r = R·sqrt(u)，theta 均匀。开方是关键，保证面密度恒定
         r = rules.generation_disk_radius_m * math.sqrt(rng.random())
         ang = rng.uniform(0, 2 * math.pi)
         x = r * math.cos(ang)
@@ -181,10 +180,10 @@ def generate_scenario(rules: SimulationRules, problem_no: int, seed: int | None 
 
 
 def demo_scenario(problem_no: int = 4) -> Scenario:
-    """确定性演示场景：10 个干扰源，便于联调（满足官方 10..16 约束）。
+    """确定性演示场景：10 个干扰源，便于联调，也满足官方 10..16 的约束
 
-    问题4：ch2 为定向（朝向 90°，覆盖 60°..120°），其余全向；
-    问题3：全部全向。
+    问题4：ch2 为定向，朝向 90°，覆盖 0°..180°，其余全向；
+    问题3：全部全向
     """
     positions = [
         (500.0, 0.0), (-800.0, 0.0), (0.0, 900.0), (-1200.0, 300.0),

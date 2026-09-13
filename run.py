@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""无线电干扰源环境模拟器（本地演练版）一键启动。
+"""无线电干扰源环境模拟器一键启动，跑的就是本地演练版
 
 用法：
     python3 run.py                      # 默认配置启动
@@ -8,7 +8,7 @@
     python3 run.py --window 300 --countdown 5   # 缩短窗口便于联调
     python3 run.py --demo               # 使用固定演示场景
 
-数据落在 ./data/（SQLite 统计 + behavior-logs/ 行为日志），
+数据落在 ./data/ 下，里头是 SQLite 统计加 behavior-logs/ 行为日志，
 配置写在 data/jammers-simulator.config.json。
 """
 from __future__ import annotations
